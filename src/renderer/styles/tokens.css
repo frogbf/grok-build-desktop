@@ -1,0 +1,91 @@
+/* ZCode / Codex-adjacent dark workspace + tier-colored singularity */
+:root {
+  /* Flat charcoal surfaces (ZCode) */
+  --bg-void: #0e0e0e;
+  --bg-app: #121212;
+  --bg-sidebar: #161616;
+  --bg-sidebar-hover: #1e1e1e;
+  --bg-elevated: #1c1c1c;
+  --bg-card: #1a1a1a;
+  --bg-input: #222222;
+  --bg-chip: #2a2a2a;
+  --bg-active: #252525;
+
+  /* Hairline borders — barely there */
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --border-default: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.12);
+
+  /* Text hierarchy */
+  --text-primary: #ececec;
+  --text-secondary: #a0a0a0;
+  --text-muted: #6e6e6e;
+  --text-faint: #4a4a4a;
+
+  /* Tier accent (overridden by [data-tier]) — default Super purple */
+  --accent: #a78bfa;
+  --accent-soft: rgba(167, 139, 250, 0.14);
+  --accent-text: #ddd6fe;
+  --accent-glow: rgba(167, 139, 250, 0.28);
+  --border-focus: rgba(167, 139, 250, 0.45);
+
+  /* Hero presentation (assets are already tier-colored) */
+  --hero-filter: none;
+  --hero-opacity: 0.42;
+
+  /* Warm status (permission) */
+  --warm: #f0a060;
+  --warm-soft: rgba(240, 160, 96, 0.12);
+
+  --success: #5ecf8a;
+  --danger: #e86a6a;
+  --info: #7eb8ff;
+
+  /* Layout */
+  --sidebar-width: 260px;
+  --titlebar-height: 36px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-pill: 999px;
+
+  --font-sans: 'Inter', 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+
+  --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Free — white / silver singularity asset */
+[data-tier='free'] {
+  --accent: #e8e8ec;
+  --accent-soft: rgba(255, 255, 255, 0.1);
+  --accent-text: #fafafa;
+  --accent-glow: rgba(255, 255, 255, 0.22);
+  --border-focus: rgba(255, 255, 255, 0.35);
+  --hero-filter: none;
+  --hero-opacity: 0.4;
+}
+
+/* Super — purple singularity asset */
+[data-tier='super'] {
+  --accent: #a78bfa;
+  --accent-soft: rgba(167, 139, 250, 0.14);
+  --accent-text: #ddd6fe;
+  --accent-glow: rgba(167, 139, 250, 0.28);
+  --border-focus: rgba(167, 139, 250, 0.45);
+  --hero-filter: none;
+  --hero-opacity: 0.46;
+}
+
+/* Heavy — gold singularity asset (true recolor, not hue-rotate) */
+[data-tier='heavy'] {
+  --accent: #eab308;
+  --accent-soft: rgba(234, 179, 8, 0.16);
+  --accent-text: #fde68a;
+  --accent-glow: rgba(250, 204, 21, 0.32);
+  --border-focus: rgba(234, 179, 8, 0.5);
+  --hero-filter: none;
+  --hero-opacity: 0.5;
+}

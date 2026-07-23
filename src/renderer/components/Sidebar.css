@@ -1,0 +1,245 @@
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border-subtle);
+}
+
+.nav-block {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 10px 8px 6px;
+}
+
+.nav-item {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  text-align: left;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.nav-item:hover:not(:disabled) {
+  background: var(--bg-sidebar-hover);
+  color: var(--text-primary);
+}
+
+.nav-item:disabled {
+  opacity: 0.4;
+}
+
+.nav-icon {
+  display: grid;
+  place-items: center;
+  color: inherit;
+}
+
+.nav-label {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.view-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 10px 6px;
+}
+
+.projects-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: var(--bg-chip);
+  border: 1px solid var(--border-default);
+}
+
+.toggle-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 2px;
+}
+
+.icon-btn {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+}
+
+.icon-btn:hover {
+  background: var(--bg-sidebar-hover);
+  color: var(--text-primary);
+}
+
+.project-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 6px 12px;
+}
+
+.empty-projects {
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.empty-projects p {
+  margin: 0 0 8px;
+}
+
+.linkish {
+  color: var(--accent-text);
+  font-size: 12px;
+}
+
+.linkish:hover {
+  text-decoration: underline;
+}
+
+.project-group {
+  margin-bottom: 8px;
+}
+
+.project-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  text-align: left;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.project-head:hover {
+  background: var(--bg-sidebar-hover);
+  color: var(--text-primary);
+}
+
+.project-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thread-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-left: 4px;
+}
+
+.thread-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px 7px 18px;
+  border-radius: var(--radius-md);
+  text-align: left;
+  color: var(--text-muted);
+  transition: background 0.1s ease, color 0.1s ease;
+}
+
+.thread-item:hover {
+  background: var(--bg-sidebar-hover);
+  color: var(--text-secondary);
+}
+
+.thread-item.active {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.thread-title {
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thread-time {
+  font-size: 11px;
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+
+.thread-item.active .thread-time {
+  color: var(--text-muted);
+}
+
+.sidebar-foot {
+  border-top: 1px solid var(--border-subtle);
+  padding: 8px 10px;
+}
+
+.user-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 4px;
+  border-radius: var(--radius-md);
+}
+
+.avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #0c0c0e;
+  border: 1px solid var(--border-default);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.user-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.user-name {
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.user-mode {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.status-line {
+  margin: 6px 4px 0;
+  font-size: 11px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

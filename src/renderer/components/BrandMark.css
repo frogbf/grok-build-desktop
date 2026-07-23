@@ -1,0 +1,44 @@
+.brand-mark-img {
+  display: block;
+  flex-shrink: 0;
+  border-radius: 50%;
+  user-select: none;
+  -webkit-user-drag: none;
+  object-fit: cover;
+  background: #000;
+  /* real recolored assets — no hue-rotate hacks */
+  filter: none;
+}
+
+.brand-watermark-photo {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.brand-watermark-photo img {
+  width: min(70vmin, 520px);
+  height: min(70vmin, 520px);
+  object-fit: contain;
+  opacity: var(--hero-opacity, 0.42);
+  filter: var(--hero-filter, none);
+  user-select: none;
+  -webkit-user-drag: none;
+  mask-image: radial-gradient(
+    circle at 50% 50%,
+    #000 18%,
+    rgba(0, 0, 0, 0.85) 40%,
+    rgba(0, 0, 0, 0.35) 55%,
+    transparent 70%
+  );
+  -webkit-mask-image: radial-gradient(
+    circle at 50% 50%,
+    #000 18%,
+    rgba(0, 0, 0, 0.85) 40%,
+    rgba(0, 0, 0, 0.35) 55%,
+    transparent 70%
+  );
+}

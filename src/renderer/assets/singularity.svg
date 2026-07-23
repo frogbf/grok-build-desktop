@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none" role="img" aria-label="Singularity">
+  <!--
+    Icon mark inspired by a classic lensed black-hole silhouette:
+    circular event horizon + bright photon ring + edge-on disk with
+    gravitational lensing (upper + lower arcs). Original artwork — not a trademark.
+  -->
+  <defs>
+    <radialGradient id="void" cx="50%" cy="48%" r="50%">
+      <stop offset="0%" stop-color="#000"/>
+      <stop offset="85%" stop-color="#000"/>
+      <stop offset="100%" stop-color="#050508"/>
+    </radialGradient>
+
+    <!-- photon ring: white → soft violet -->
+    <linearGradient id="ringBright" x1="64" y1="20" x2="64" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#f0eaff"/>
+      <stop offset="35%" stop-color="#d4c4ff"/>
+      <stop offset="50%" stop-color="#ffffff"/>
+      <stop offset="65%" stop-color="#c4b5fd"/>
+      <stop offset="100%" stop-color="#a78bfa"/>
+    </linearGradient>
+
+    <linearGradient id="disk" x1="8" y1="64" x2="120" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#6d28d9" stop-opacity="0"/>
+      <stop offset="18%" stop-color="#a78bfa" stop-opacity="0.55"/>
+      <stop offset="35%" stop-color="#ede9fe" stop-opacity="0.95"/>
+      <stop offset="50%" stop-color="#ffffff"/>
+      <stop offset="65%" stop-color="#ddd6fe" stop-opacity="0.9"/>
+      <stop offset="82%" stop-color="#8b5cf6" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#4c1d95" stop-opacity="0"/>
+    </linearGradient>
+
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="30%" stop-color="#7c3aed" stop-opacity="0"/>
+      <stop offset="60%" stop-color="#7c3aed" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#7c3aed" stop-opacity="0"/>
+    </radialGradient>
+
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="1.2"/>
+    </filter>
+    <filter id="softMore" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2.2"/>
+    </filter>
+
+    <!-- upper lensed disk only above midline of sphere -->
+    <clipPath id="upper">
+      <rect x="0" y="0" width="128" height="62"/>
+    </clipPath>
+    <!-- lower disk below midline -->
+    <clipPath id="lower">
+      <rect x="0" y="62" width="128" height="66"/>
+    </clipPath>
+  </defs>
+
+  <!-- ambient purple haze -->
+  <circle cx="64" cy="64" r="60" fill="url(#glow)" filter="url(#softMore)"/>
+
+  <!-- outer faint disk filaments (edge-on, wide) -->
+  <ellipse cx="64" cy="64" rx="58" ry="10" stroke="url(#disk)" stroke-width="1.2" opacity="0.35" filter="url(#soft)"/>
+  <ellipse cx="64" cy="64" rx="52" ry="8" stroke="url(#disk)" stroke-width="1.6" opacity="0.45" filter="url(#soft)"/>
+
+  <!-- UPPER lensed arc of the disk (over the top of the hole) -->
+  <g clip-path="url(#upper)">
+    <ellipse cx="64" cy="64" rx="40" ry="36" stroke="url(#ringBright)" stroke-width="3.8" opacity="0.95" filter="url(#soft)"/>
+    <ellipse cx="64" cy="64" rx="36" ry="32" stroke="#c4b5fd" stroke-width="1.4" opacity="0.45"/>
+    <ellipse cx="64" cy="64" rx="44" ry="40" stroke="#8b5cf6" stroke-width="1" opacity="0.25" filter="url(#soft)"/>
+  </g>
+
+  <!-- photon ring / bright circle around horizon -->
+  <circle cx="64" cy="64" r="29" stroke="url(#ringBright)" stroke-width="4.5" opacity="0.95" filter="url(#soft)"/>
+  <circle cx="64" cy="64" r="27.2" stroke="#ffffff" stroke-width="1.6" opacity="0.85"/>
+  <circle cx="64" cy="64" r="30.5" stroke="#a78bfa" stroke-width="1.2" opacity="0.35" filter="url(#soft)"/>
+
+  <!-- event horizon — pure black disc (the silhouette) -->
+  <circle cx="64" cy="64" r="25.5" fill="url(#void)"/>
+
+  <!-- LOWER disk (near side) + right/left streams -->
+  <g clip-path="url(#lower)">
+    <ellipse cx="64" cy="64" rx="40" ry="36" stroke="url(#ringBright)" stroke-width="4" opacity="0.9" filter="url(#soft)"/>
+    <ellipse cx="64" cy="64" rx="36" ry="32" stroke="#ddd6fe" stroke-width="1.3" opacity="0.4"/>
+  </g>
+
+  <!-- edge-on disk mid-plane (crosses in front of lower half of sphere) -->
+  <ellipse cx="64" cy="64" rx="56" ry="7.5" stroke="url(#disk)" stroke-width="2.8" opacity="0.85" filter="url(#soft)"/>
+  <ellipse cx="64" cy="64" rx="48" ry="5.5" stroke="#ffffff" stroke-width="1.4" opacity="0.55"/>
+
+  <!-- stream filaments left / right (like reference streaks) -->
+  <path d="M6 64c8-3 16-5 24-5" stroke="#c4b5fd" stroke-width="1.2" stroke-linecap="round" opacity="0.35" filter="url(#soft)"/>
+  <path d="M98 59c8 0 16 2 24 5" stroke="#a78bfa" stroke-width="1.1" stroke-linecap="round" opacity="0.3" filter="url(#soft)"/>
+  <path d="M10 68c10 2 20 3 28 2" stroke="#8b5cf6" stroke-width="0.9" stroke-linecap="round" opacity="0.28" filter="url(#soft)"/>
+  <path d="M90 66c10 1 18 2 26 0" stroke="#c4b5fd" stroke-width="0.9" stroke-linecap="round" opacity="0.28" filter="url(#soft)"/>
+</svg>

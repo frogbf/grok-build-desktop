@@ -1,0 +1,79 @@
+{
+  "name": "grok-build-desktop",
+  "version": "0.1.0",
+  "description": "Community desktop GUI for Grok Build — Codex-style workspace, Grok aesthetics",
+  "private": true,
+  "main": "out/main/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "dev:safe": "GROK_DESKTOP_NO_SANDBOX=1 electron-vite dev -- --no-sandbox --disable-gpu",
+    "start": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "postinstall": "electron-builder install-app-deps || true",
+    "rebuild:pty": "npx @electron/rebuild -f -w node-pty",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "clsx": "^2.1.1",
+    "node-pty": "^1.1.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^34.3.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^3.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.0"
+  },
+  "build": {
+    "appId": "com.community.grok-build-desktop",
+    "productName": "Grok Build Desktop",
+    "directories": {
+      "output": "release",
+      "buildResources": "resources"
+    },
+    "files": [
+      "out/**/*",
+      "package.json",
+      "resources/icon.png",
+      "resources/icon-256.png",
+      "resources/icon-128.png",
+      "resources/icon-64.png",
+      "resources/icon-free.png"
+    ],
+    "linux": {
+      "icon": "resources/icon.png",
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development"
+    },
+    "mac": {
+      "icon": "resources/icon.png",
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.developer-tools"
+    },
+    "win": {
+      "icon": "resources/icon.png",
+      "target": [
+        "nsis"
+      ]
+    }
+  }
+}

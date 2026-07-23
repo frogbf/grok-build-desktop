@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Build / package output
+out/
+dist/
+release/
+*.AppImage
+*.deb
+*.dmg
+*.exe
+*.blockmap
+
+# Logs & OS
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Env / secrets (never commit credentials)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Editor / local
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Electron
+.electron-cache/

@@ -1,0 +1,136 @@
+.terminal-dock {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 120px;
+  max-height: 50vh;
+  border-top: 1px solid var(--border-subtle);
+  background: #0c0c0e;
+  position: relative;
+}
+
+.term-dock-resizer {
+  position: absolute;
+  top: -3px;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: row-resize;
+  z-index: 2;
+}
+
+.term-dock-resizer:hover {
+  background: rgba(192, 132, 252, 0.25);
+}
+
+.term-dock-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-sidebar);
+  flex-shrink: 0;
+}
+
+.term-tab-list {
+  display: flex;
+  gap: 2px;
+  overflow: auto;
+  flex: 1;
+  min-width: 0;
+}
+
+.term-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  max-width: 160px;
+}
+
+.term-tab span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.term-tab:hover {
+  background: var(--bg-sidebar-hover);
+  color: var(--text-secondary);
+}
+
+.term-tab.active {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.term-tab-x {
+  opacity: 0.5;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.term-tab-x:hover {
+  opacity: 1;
+  color: #f87171;
+}
+
+.term-tab-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.term-action {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: var(--text-muted);
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+}
+
+.term-action:hover {
+  background: var(--bg-sidebar-hover);
+  color: var(--text-primary);
+}
+
+.term-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.08);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.term-dock-host {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  padding: 2px 4px 4px;
+}
+
+.term-instance {
+  position: absolute;
+  inset: 0;
+  padding: 2px 4px;
+}
+
+.term-instance .xterm {
+  height: 100%;
+}
+
+.term-instance .xterm-viewport {
+  overflow-y: auto !important;
+}
