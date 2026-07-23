@@ -987,10 +987,29 @@ export class GrokRuntime {
 
   stopSession(sessionId: string): void {
     const child = this.children.get(sessionId)
-    if (child) {
-      child.kill('SIGTERM')
-      this.children.delete(sessionId)
+    if (!child) return
+    // Windows: kill process tree (grok may spawn tools). Unix: SIGTERM is enough.
+    if (platform() === 'win32' && child.pid) {
+      try {
+        spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], {
+          windowsHide: true,
+          timeout: 5000,
+        })
+      } catch {
+        try {
+          child.kill()
+        } catch {
+          // ignore
+        }
+      }
+    } else {
+      try {
+        child.kill('SIGTERM')
+      } catch {
+        // ignore
+      }
     }
+    this.children.delete(sessionId)
   }
 
   /** Local OAuth profile from ~/.grok/auth.json (no tokens returned). */

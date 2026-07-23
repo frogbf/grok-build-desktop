@@ -54,6 +54,16 @@
       "resources/icon-64.png",
       "resources/icon-free.png"
     ],
+    "asarUnpack": [
+      "**/node_modules/node-pty/**"
+    ],
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Grok Build Desktop"
+    },
     "linux": {
       "icon": "resources/icon.png",
       "target": [

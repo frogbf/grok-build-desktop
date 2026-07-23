@@ -5,8 +5,13 @@ import { registerIpc } from './ipc'
 import { GrokRuntime } from './grok-runtime'
 import { TerminalManager } from './terminal-manager'
 
-// Helpful on remote/VM Linux where GPU sandboxes often fail
-if (process.env.GROK_DESKTOP_DISABLE_GPU !== '0') {
+// GPU: only disable by default on Linux (remote/VM sandboxes). Win/mac keep HW accel.
+// Override: GROK_DESKTOP_DISABLE_GPU=1 force off; =0 force on (even on Linux).
+const disableGpuEnv = process.env.GROK_DESKTOP_DISABLE_GPU
+if (
+  disableGpuEnv === '1' ||
+  (process.platform === 'linux' && disableGpuEnv !== '0')
+) {
   app.disableHardwareAcceleration()
 }
 if (process.env.GROK_DESKTOP_NO_SANDBOX === '1') {

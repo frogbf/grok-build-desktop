@@ -1,119 +1,167 @@
 # Grok Build Desktop
 
-Community **Electron** GUI for [Grok Build](https://github.com/xai-org/grok-build).
+[中文](./README.zh-CN.md) · English
 
-- **Layout**: Codex-style command center (sidebar threads · main chat · inspector)
-- **Look**: Grok Night — deep monochrome + magenta/violet accent + singularity mark
-- **Runtime**: official `grok` CLI as backend (no reimplemented agent loop)
+Community **Electron** desktop GUI for [Grok Build](https://github.com/xai-org/grok-build).
 
-> Unofficial community client. Not affiliated with xAI / SpaceXAI.
+- **Layout** — Codex-style command center (sidebar threads · main chat · inspector)
+- **Look** — Grok Night: deep monochrome, magenta/violet accent, original Singularity mark
+- **Runtime** — Official `grok` CLI as the agent backend (no reimplemented agent loop)
+
+> Unofficial community client. **Not affiliated with xAI / SpaceXAI.**
 >
-> **Branding:** The UI uses an original “Singularity” mark (accretion disk / event horizon SVG in `src/renderer/assets/singularity.svg`). Do **not** ship official Grok/xAI logos or wordmarks as the app identity. Product name may describe interoperability with Grok Build CLI; avoid implying official endorsement.
+> **Branding:** The UI uses an original “Singularity” mark (`src/renderer/assets/singularity.svg`). Do **not** ship official Grok/xAI logos or wordmarks as the app identity. The product name may describe interoperability with the Grok Build CLI; avoid implying official endorsement.
 
 ## Stack
 
 | Layer | Tech |
 |-------|------|
 | Shell | Electron 34 |
-| UI | React 18 + TypeScript + Vite (electron-vite) |
-| Agent | spawn `grok` (`-p` / stream-json today → ACP next) |
+| UI | React 18 + TypeScript + Vite ([electron-vite](https://electron-vite.org/)) |
+| Agent | Spawn `grok` (`-p` / `streaming-json` today → ACP planned) |
+| Terminal | `node-pty` + xterm.js |
+
+## Requirements
+
+- **Node.js** 18+
+- **npm** (or compatible package manager)
+- Optional for live mode: [Grok Build CLI](https://x.ai/cli) (`grok`)
+- Optional: `git` on `PATH` (branch chip, Review panel)
+
+Without the CLI, the app still runs in **Demo** mode so you can exercise the full UI.
 
 ## Develop
 
-**必须用 Electron 启动**，不要只在浏览器打开 Vite 地址。
+**Always start via Electron.** Opening only the Vite URL in a browser will show the UI without the main process (no `window.grokDesktop` bridge).
 
 ```bash
 cd grok-build-desktop
 npm install
 npm run dev
-# Linux / 无 GPU 环境推荐：
+
+# Linux / headless / no-GPU environments:
 npm run dev:safe
 ```
 
-成功时会弹出 **独立桌面窗口**（Grok Build Desktop）。  
-若浏览器访问 `http://localhost:5173`，页面能显示 UI，但 **没有主进程**，会提示「无法连接主进程 / 未注入桌面桥接」——这是预期行为。
+A standalone **Grok Build Desktop** window should open. If you open `http://localhost:5173` in a browser instead, missing-bridge errors are expected.
 
-Requires Node 18+. Optional: install Grok CLI for live mode:
+### Optional: install Grok CLI
 
 ```bash
+# macOS / Linux
 curl -fsSL https://x.ai/cli/install.sh | bash
+
+# Windows (PowerShell)
+irm https://x.ai/cli/install.ps1 | iex
 ```
 
-Without CLI, the app runs in **Demo** mode and still exercises the full UI.
-
-## Architecture
-
-```
-Renderer (React)
-   ↕ contextBridge preload
-Main process IPC
-   ↕ child_process
-grok CLI  (~/.grok/bin/grok)   ← single agent backend
-   ↕
-~/.grok/auth.json              ← shared OAuth with terminal CLI
-```
-
-### Bootstrap state machine
-
-```
-DetectCLI → need_cli (confirm → official install script)
-         → CheckAuth → need_auth (spawn `grok login`)
-         → ready → workspace (prompt only when ready)
-```
-
-- Desktop **does not** implement OAuth; it orchestrates `grok login` / `logout`.
-- CLI install is **never silent** — native confirm dialog first.
-- No agent loop in the shell; prompts go to official `grok -p` (ACP next).
-
-Key files:
-
-- `src/main/grok-runtime.ts` — bootstrap, install, login, spawn
-- `src/main/ipc.ts` — typed IPC handlers
-- `src/preload/index.ts` — `window.grokDesktop`
-- `src/renderer/components/SetupGate.tsx` — install/login UI
-- `src/renderer/` — ZCode-style workspace
-
-## Design notes
-
-Layout and density are modeled after **ZCode / Codex-style** agent desktops (not Claude’s light Home):
-
-- Flat charcoal `#121212` / sidebar `#161616` — no purple wash
-- Left: 新建任务 / 搜索 / 技能 · 项目分组线程 · 相对时间
-- Center empty: large watermark + 时段问候 + **floating** composer card
-- Composer toolbar: `+` · 权限模式(暖橙「完全访问」) · 模型 · 强度 · 圆形发送
-- Inspector only appears after a run (not on home)
-
-Tokens: `src/renderer/styles/tokens.css`  
-Grok accent remains magenta `#c084fc`; permission chip uses ZCode-like warm orange.
-
-## Roadmap
-
-### Done (v0.1 → v0.2)
-
-- [x] Official `streaming-json` chat + session list / resume from `~/.grok/sessions`
-- [x] Real account subscription / quota + avatar user menu (language, zoom, upgrade)
-- [x] Git branch chip + switch (dirty-blocked) + file-level diff in Review
-- [x] Session search (`Ctrl+K`)
-- [x] Thought cards + tool cards (from `updates.jsonl`)
-- [x] Terminal dock (`node-pty`), Skills page, i18n zh/en
-
-### Next
-
-- [ ] Full **ACP** client (stdio JSON-RPC) instead of one-shot `-p`
-- [ ] In-run permission cards (Approve / Deny) when protocol exposes them
-- [ ] Composer `@` / `/` / `$` pickers; follow-up queue while running
-- [ ] Worktree isolation for parallel agents
-- [ ] Auto-update + packaging smoke tests
+The in-app setup gate can also run the official install script after confirmation.
 
 ## Scripts
 
 | Command | Description |
 |---------|-------------|
 | `npm run dev` | Electron + HMR |
-| `npm run build` | Compile main/preload/renderer |
-| `npm run typecheck` | `tsc` both projects |
-| `npm run dist` | electron-builder packages |
+| `npm run dev:safe` | Dev with no-sandbox / safer GPU flags (Linux-friendly) |
+| `npm run build` | Compile main / preload / renderer |
+| `npm run typecheck` | Typecheck both TS projects |
+| `npm run rebuild:pty` | Rebuild `node-pty` for the current Electron ABI |
+| `npm run pack` | Build + electron-builder `--dir` (unpacked app) |
+| `npm run dist` | Build + platform installers |
+
+## Packaging
+
+Installers are **platform-specific**. Prefer building **on the target OS** (native modules such as `node-pty` do not cross-compile cleanly).
+
+```bash
+# On Windows
+npm ci
+npm run rebuild:pty
+npm run dist -- --win
+
+# On macOS
+npm ci
+npm run rebuild:pty
+npm run dist -- --mac
+
+# On Linux
+npm ci
+npm run rebuild:pty
+npm run dist -- --linux
+```
+
+Configured targets (see `package.json` → `build`):
+
+| Platform | Targets |
+|----------|---------|
+| Windows | NSIS |
+| macOS | DMG |
+| Linux | AppImage, deb |
+
+Output directory: `release/`.
+
+## Architecture
+
+```
+Renderer (React)
+   ↕ contextBridge (preload)
+Main process IPC
+   ↕ child_process / node-pty
+grok CLI  (~/.grok/bin/grok)   ← single agent backend
+   ↕
+~/.grok/auth.json              ← shared OAuth with the terminal CLI
+~/.grok/sessions/              ← session list / resume
+```
+
+### Bootstrap
+
+```
+Detect CLI → need_cli  (confirm → official install script)
+          → Check auth → need_auth  (spawn `grok login`)
+          → ready → workspace (prompts only when ready)
+```
+
+- Desktop **does not** implement OAuth; it orchestrates `grok login` / `logout`.
+- CLI install is **never silent** — a native confirm dialog runs first.
+- No agent loop in the shell; prompts go to official `grok -p` (ACP next).
+
+### Key files
+
+| Path | Role |
+|------|------|
+| `src/main/grok-runtime.ts` | Bootstrap, install, login, spawn |
+| `src/main/ipc.ts` | Typed IPC handlers |
+| `src/main/terminal-manager.ts` | Embedded PTY sessions |
+| `src/preload/index.ts` | `window.grokDesktop` |
+| `src/renderer/components/SetupGate.tsx` | Install / login UI |
+| `src/renderer/` | Workspace UI |
+| `src/renderer/styles/tokens.css` | Design tokens |
+
+## Features (current)
+
+- Official `streaming-json` chat; session list / resume from `~/.grok/sessions`
+- Account subscription / quota + avatar menu (language, zoom, upgrade links)
+- Git branch chip + switch (blocked when dirty) + file-level diff in Review
+- Session search (`Ctrl+K` / `⌘K`)
+- Thought cards + tool cards (from session `updates.jsonl`)
+- Terminal dock (`node-pty`), Skills page, i18n (zh / en)
+
+## Roadmap
+
+- [ ] Full **ACP** client (stdio JSON-RPC) instead of one-shot `-p`
+- [ ] In-run permission cards (Approve / Deny) when the protocol exposes them
+- [ ] Composer `@` / `/` / `$` pickers; follow-up queue while running
+- [ ] Worktree isolation for parallel agents
+- [ ] Auto-update + packaging smoke tests
+
+## Design notes
+
+Layout and density follow **ZCode / Codex-style** agent desktops (not a light “home” shell):
+
+- Flat charcoal base (`#121212` / sidebar `#161616`)
+- Empty home: large watermark, time-of-day greeting, **floating** composer
+- Permission chip uses warm orange; accent remains magenta `#c084fc`
 
 ## License
 
-Apache-2.0 (aligned with Grok Build). Brand marks belong to their owners — do not imply official endorsement.
+[Apache-2.0](./LICENSE) (aligned with Grok Build). Brand marks belong to their owners — do not imply official endorsement.

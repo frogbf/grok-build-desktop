@@ -201,8 +201,10 @@ export async function getFileDiff(
   const code = line.slice(0, 2)
 
   if (code === '??') {
-    // Untracked: synthesize a new-file style diff (git --no-index exits 1 on differences)
-    const diffRes = await git(cwd, ['diff', '--no-index', '--', '/dev/null', filePath])
+    // Untracked: synthesize a new-file style diff (git --no-index exits 1 on differences).
+    // Windows Git accepts NUL; some builds are picky about /dev/null.
+    const emptyBlob = process.platform === 'win32' ? 'NUL' : '/dev/null'
+    const diffRes = await git(cwd, ['diff', '--no-index', '--', emptyBlob, filePath])
     const body = diffRes.out || ''
     if (body) {
       return { ok: true, diff: trimDiff(body), mode: 'untracked' }
