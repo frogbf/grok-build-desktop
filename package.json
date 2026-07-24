@@ -47,6 +47,9 @@
     "typescript": "^5.8.2",
     "vite": "^6.2.0"
   },
+  "overrides": {
+    "node-gyp": "^12.1.0"
+  },
   "build": {
     "appId": "com.community.grok-build-desktop",
     "productName": "Grok Build Desktop",

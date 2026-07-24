@@ -53,52 +53,53 @@ jobs:
       github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch' &&
       (contains(github.event.inputs.platforms, 'win') || github.event.inputs.platforms == 'all' || github.event.inputs.platforms == '')
-    # Pin to windows-2022 (VS 2022). windows-latest / windows-2025 now ship
-    # Visual Studio 2026 (18.x); @electron/rebuild → node-gyp@9 cannot detect it
-    # ("Could not find any Visual Studio installation to use").
+    # windows-2022 = VS 2022 (stable for native rebuilds). windows-latest may be VS 2026;
+    # package.json overrides node-gyp to 12.x which understands 2022 and 2026.
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # node-gyp 12 requires Node ^20.17 or >=22.9; use 22 LTS for CI.
+          node-version: '22'
           cache: npm
-      # node-pty / node-gyp need MSVC + Windows SDK on the PATH.
-      # Must run before npm ci / rebuild; keep default PowerShell shell so
-      # INCLUDE/LIB/PATH from this action are not lost (bash on Windows breaks paths).
+      # Put cl.exe / Windows SDK on PATH for the actual compile.
+      # Default pwsh shell — bash on Windows shadows link.exe and breaks MSVC.
       - uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
-          vsversion: '2022'
-      - name: Verify MSVC toolchain
+      - name: Locate Visual Studio for node-gyp
         shell: pwsh
         run: |
-          Write-Host "VCINSTALLDIR=$env:VCINSTALLDIR"
-          Write-Host "WindowsSdkDir=$env:WindowsSdkDir"
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (-not (Test-Path $vswhere)) { throw "vswhere.exe missing" }
+          $vsPath = & $vswhere -latest -products * `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+            -property installationPath
+          if (-not $vsPath) { throw "No VS install with VC.Tools.x86.x64" }
+          $vsPath = $vsPath.Trim()
+          Write-Host "VS installationPath=$vsPath"
+          # node-gyp treats VCINSTALLDIR's parent as a strict match against the
+          # install path. msvc-dev-cmd sometimes sets a nested toolset path which
+          # makes every candidate fail ("Could not find any Visual Studio...").
+          # Point it at the VS root\VC and pass the full path as msvs_version.
+          $vcDir = Join-Path $vsPath 'VC'
+          "VCINSTALLDIR=$vcDir" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "npm_config_msvs_version=$vsPath" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           if (-not (Get-Command cl.exe -ErrorAction SilentlyContinue)) {
             throw "cl.exe not on PATH after msvc-dev-cmd"
           }
           cl.exe 2>&1 | Select-Object -First 3
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          if (Test-Path $vswhere) {
-            & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath,catalog_productLineVersion
-          }
       - name: Install dependencies
         run: npm ci
-        env:
-          npm_config_msvs_version: '2022'
-          GYP_MSVS_VERSION: '2022'
       - name: Rebuild node-pty for Electron
-        run: npm run rebuild:pty
-        env:
-          npm_config_msvs_version: '2022'
-          GYP_MSVS_VERSION: '2022'
+        shell: pwsh
+        run: |
+          Write-Host "VCINSTALLDIR=$env:VCINSTALLDIR"
+          Write-Host "npm_config_msvs_version=$env:npm_config_msvs_version"
+          npm run rebuild:pty
       - name: Build Windows installers
-        # Use default pwsh shell — inherits MSVC env from msvc-dev-cmd
         run: npm run dist:win
-        env:
-          npm_config_msvs_version: '2022'
-          GYP_MSVS_VERSION: '2022'
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
