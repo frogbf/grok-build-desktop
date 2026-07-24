@@ -59,6 +59,67 @@ export function basenamePath(p: string): string {
   return parts[parts.length - 1] || p
 }
 
+/**
+ * Convert a `file://` URL to an absolute OS path.
+ * Linux/macOS paste from file managers often uses text/uri-list.
+ * Windows may use file:///C:/... or file://localhost/C:/...
+ */
+export function fileUriToPath(uri: string): string | null {
+  const raw = uri.trim()
+  if (!raw) return null
+  if (!/^file:/i.test(raw)) return null
+  try {
+    const u = new URL(raw)
+    // UNC: file://server/share/path
+    if (u.hostname && u.hostname !== 'localhost') {
+      const rest = decodeURIComponent(u.pathname || '').replace(/\//g, '\\')
+      return `\\\\${u.hostname}${rest}`
+    }
+    let p = decodeURIComponent(u.pathname || '')
+    // Windows drive: /C:/Users/... or /C|/Users/...
+    if (/^\/[A-Za-z]:[\\/]/.test(p) || /^\/[A-Za-z]\|/.test(p)) {
+      p = p.slice(1)
+      if (p[1] === '|') p = `${p[0]}:${p.slice(2)}`
+      return p.replace(/\//g, '\\')
+    }
+    // Unix absolute (/home/..., /Users/...)
+    return p
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Extract local file paths from clipboard payloads used across platforms:
+ * - text/uri-list (Linux Nautilus/Dolphin, some macOS)
+ * - text/plain with file:// lines or absolute paths
+ */
+export function pathsFromClipboardText(text: string): string[] {
+  if (!text || !text.trim()) return []
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('#'))
+
+  const out: string[] = []
+  for (const line of lines) {
+    if (/^file:/i.test(line)) {
+      const p = fileUriToPath(line)
+      if (p) out.push(p)
+      continue
+    }
+    // Absolute paths: Unix /... or Windows C:\... / C:/...
+    if (
+      line.startsWith('/') ||
+      /^[A-Za-z]:[\\/]/.test(line) ||
+      line.startsWith('\\\\')
+    ) {
+      out.push(line)
+    }
+  }
+  return out
+}
+
 export function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()

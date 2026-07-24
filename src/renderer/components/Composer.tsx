@@ -15,6 +15,7 @@ import {
   isVisionMime,
   isVisionPath,
   mimeFromName,
+  pathsFromClipboardText,
   readFileAsDataUrl,
   type ComposerAttachment,
 } from '../lib/attachments'
@@ -321,7 +322,7 @@ export function Composer({
       const cd = e.clipboardData
       if (!cd) return
 
-      // Prefer image items (screenshots / "Copy Image")
+      // Prefer image items (screenshots / "Copy Image") — Win Ctrl+V, Mac Cmd+V, Linux Ctrl+V
       const imageItems = Array.from(cd.items || []).filter(
         (it) => it.kind === 'file' && it.type.startsWith('image/'),
       )
@@ -342,13 +343,29 @@ export function Composer({
         return
       }
 
-      // Copied files from Explorer (often file paths as text on some platforms)
+      // File objects (Explorer / Finder / file managers that expose FileList)
       if (files.length) {
         e.preventDefault()
         await ingestFiles(files)
+        return
+      }
+
+      // Linux (and some macOS) file managers paste text/uri-list as file:// URIs
+      // rather than File objects. Also accept absolute paths in text/plain.
+      const uriList = cd.getData('text/uri-list') || ''
+      const plain = cd.getData('text/plain') || ''
+      const paths = [
+        ...pathsFromClipboardText(uriList),
+        ...pathsFromClipboardText(plain),
+      ]
+      // de-dupe
+      const unique = [...new Set(paths)]
+      if (unique.length) {
+        e.preventDefault()
+        await ingestPaths(unique)
       }
     },
-    [disabled, ingestFiles, running],
+    [disabled, ingestFiles, ingestPaths, running],
   )
 
   const onPickFiles = async () => {
