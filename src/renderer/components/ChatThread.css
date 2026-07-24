@@ -202,10 +202,72 @@
   overflow: auto;
 }
 
-/* Tool card */
-.msg-tool {
+/* Tool card / batch */
+.msg-tool,
+.msg-tool-batch {
   max-width: min(720px, 94%);
   width: 100%;
+  align-self: center;
+}
+
+.msg-tool-batch {
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 0;
+}
+
+.tool-batch-sum {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+.tool-batch-sum::-webkit-details-marker {
+  display: none;
+}
+
+.tool-batch-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.tool-batch-chevron {
+  font-size: 10px;
+  color: var(--text-faint);
+  transition: transform 0.12s ease;
+}
+
+.msg-tool-batch:not([open]) .tool-batch-chevron {
+  transform: rotate(-90deg);
+}
+
+.msg-tool-batch.running .tool-batch-label {
+  color: var(--text-secondary);
+}
+
+.tool-batch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 8px 8px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 6px;
+}
+
+.tool-batch-list .tool-card {
+  border-color: transparent;
+  background: rgba(0, 0, 0, 0.25);
 }
 
 .tool-card {
@@ -219,6 +281,7 @@
   background: #141414;
   font-size: 12px;
   color: var(--text-secondary);
+  box-sizing: border-box;
 }
 
 .tool-dot {

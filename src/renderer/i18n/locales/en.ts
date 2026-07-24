@@ -57,6 +57,7 @@ export const en: Record<MessageKey, string> = {
   you: 'You',
   system: 'System',
   tool: 'Tool',
+  toolsUsed: 'Used',
   installCli: 'Install official CLI',
   login: 'Sign in (grok login)',
   logout: 'Sign out',

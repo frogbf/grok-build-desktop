@@ -9,6 +9,9 @@ export type ChatMessage = {
     toolName?: string
     toolCallId?: string
     status?: 'running' | 'done' | 'error'
+    /** Secondary line (path / query) for tool cards */
+    toolDetail?: string
+    toolKind?: string
     /** Collapsed thought / tool card */
     kind?: 'thought' | 'tool' | 'text'
   }

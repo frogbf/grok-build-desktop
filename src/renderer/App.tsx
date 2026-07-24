@@ -479,33 +479,44 @@ export default function App() {
         patchSession(runningSessionId, (s) => {
           let messages = [...s.messages]
           for (const ev of res.events) {
+            const label = (ev.title || '').trim() || 'Tool'
+            const detail = (ev.detail || '').trim()
             const existingIdx = messages.findIndex(
               (m) => m.meta?.toolCallId === ev.toolCallId,
             )
             if (existingIdx >= 0) {
               const prev = messages[existingIdx]
+              // Prefer richer titles/details; don't clobber a good name with "Tool"
+              const nextName =
+                label.toLowerCase() === 'tool' && prev.meta?.toolName
+                  ? prev.meta.toolName
+                  : label
               messages[existingIdx] = {
                 ...prev,
-                content: ev.title,
+                content: nextName,
                 meta: {
                   ...prev.meta,
                   kind: 'tool',
-                  toolName: ev.title,
+                  toolName: nextName,
                   toolCallId: ev.toolCallId,
                   status: ev.status,
+                  toolDetail: detail || prev.meta?.toolDetail,
+                  toolKind: ev.kind || prev.meta?.toolKind,
                 },
               }
             } else {
               messages.push({
                 id: `tool_${ev.toolCallId}`,
                 role: 'tool',
-                content: ev.title,
+                content: label,
                 createdAt: Date.now(),
                 meta: {
                   kind: 'tool',
-                  toolName: ev.title,
+                  toolName: label,
                   toolCallId: ev.toolCallId,
                   status: ev.status,
+                  toolDetail: detail || undefined,
+                  toolKind: ev.kind,
                 },
               })
             }

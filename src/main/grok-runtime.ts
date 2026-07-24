@@ -393,6 +393,7 @@ export class GrokRuntime {
       title: string
       status: 'running' | 'done' | 'error'
       kind?: string
+      detail?: string
     }>
     error?: string
   } {
@@ -416,19 +417,29 @@ export class GrokRuntime {
         title: string
         status: 'running' | 'done' | 'error'
         kind?: string
+        detail?: string
       }> = []
       for (const line of chunk.split(/\r?\n/)) {
         if (!line.trim()) continue
         try {
           const obj = JSON.parse(line) as {
             params?: {
-              update?: {
+              update?: Record<string, unknown> & {
                 sessionUpdate?: string
                 toolCallId?: string
                 title?: string
                 kind?: string
                 status?: string
-                _meta?: { status?: string }
+                rawInput?: unknown
+                locations?: Array<{ path?: string }>
+                _meta?: Record<string, unknown> & {
+                  status?: string
+                  'x.ai/tool'?: {
+                    name?: string
+                    label?: string
+                    kind?: string
+                  }
+                }
               }
             }
           }
@@ -436,20 +447,47 @@ export class GrokRuntime {
           if (!u?.toolCallId) continue
           const su = u.sessionUpdate || ''
           if (su !== 'tool_call' && su !== 'tool_call_update') continue
-          const statusRaw = (u.status || u._meta?.status || '').toLowerCase()
+
+          const xaiTool = u._meta?.['x.ai/tool']
+          const rawTitle = (typeof u.title === 'string' ? u.title : '').trim()
+          const toolName = (xaiTool?.name || xaiTool?.label || '').trim()
+          // Prefer human title from update; else tool id/name; never bare "tool"
+          let title = rawTitle && rawTitle.toLowerCase() !== 'tool' ? rawTitle : toolName || rawTitle
+          if (!title) title = typeof u.kind === 'string' && u.kind ? u.kind : 'Tool'
+          // snake_case tool names → readable (web_search → web search)
+          if (/^[a-z][a-z0-9_]*$/.test(title)) {
+            title = title.replace(/_/g, ' ')
+          }
+
+          const detail = summarizeToolDetail(u.rawInput, u.locations)
+          const kind = (typeof u.kind === 'string' && u.kind) || xaiTool?.kind || undefined
+
+          const statusRaw = String(u.status || u._meta?.status || '').toLowerCase()
           let status: 'running' | 'done' | 'error' = 'running'
-          if (su === 'tool_call_update' && (statusRaw === 'completed' || statusRaw === 'done' || statusRaw === 'success')) {
+          if (su === 'tool_call') {
+            status = 'running'
+          } else if (
+            statusRaw === 'completed' ||
+            statusRaw === 'done' ||
+            statusRaw === 'success' ||
+            statusRaw === 'complete'
+          ) {
             status = 'done'
           } else if (statusRaw === 'failed' || statusRaw === 'error') {
             status = 'error'
-          } else if (su === 'tool_call_update' && statusRaw) {
-            status = statusRaw.includes('run') ? 'running' : 'done'
+          } else if (statusRaw.includes('run') || statusRaw === 'pending' || statusRaw === 'in_progress') {
+            status = 'running'
+          } else if (su === 'tool_call_update') {
+            // Many updates omit status once finished — treat as done
+            status = 'done'
           }
+
           events.push({
             toolCallId: u.toolCallId,
-            title: u.title || 'tool',
-            status: su === 'tool_call' ? 'running' : status,
-            kind: u.kind,
+            title,
+            status,
+            kind,
+            detail: detail || undefined,
           })
         } catch {
           // skip bad line
@@ -1454,6 +1492,41 @@ function firstUserPromptSnippet(sessionDir: string): string | null {
     return null
   }
   return null
+}
+
+/** Short secondary line for tool cards (path / query / pattern). */
+function summarizeToolDetail(
+  rawInput: unknown,
+  locations?: Array<{ path?: string }>,
+): string {
+  const parts: string[] = []
+  if (locations?.length) {
+    const p = locations.map((l) => l.path).filter(Boolean) as string[]
+    if (p[0]) parts.push(basename(p[0]))
+  }
+  if (rawInput && typeof rawInput === 'object') {
+    const r = rawInput as Record<string, unknown>
+    const pick = (...keys: string[]) => {
+      for (const k of keys) {
+        const v = r[k]
+        if (typeof v === 'string' && v.trim()) return v.trim()
+      }
+      return ''
+    }
+    const query = pick('query', 'pattern', 'prompt', 'command', 'url')
+    const path = pick(
+      'path',
+      'file_path',
+      'filePath',
+      'target_file',
+      'target_directory',
+      'cwd',
+    )
+    if (query) parts.push(query.length > 80 ? `${query.slice(0, 77)}…` : query)
+    else if (path) parts.push(basename(path) || path)
+  }
+  // de-dupe
+  return [...new Set(parts)].join(' · ')
 }
 
 /**

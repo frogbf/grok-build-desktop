@@ -211,6 +211,7 @@ const api = {
         title: string
         status: 'running' | 'done' | 'error'
         kind?: string
+        detail?: string
       }>
       error?: string
     }> => ipcRenderer.invoke('grok:sessionToolEvents', sessionId, byteOffset),

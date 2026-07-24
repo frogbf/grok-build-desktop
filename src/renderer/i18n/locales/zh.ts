@@ -55,6 +55,7 @@ export const zh = {
   you: '你',
   system: '系统',
   tool: '工具',
+  toolsUsed: '使用了',
   installCli: '一键安装官方 CLI',
   login: '登录（grok login）',
   logout: '退出登录',
