@@ -53,53 +53,48 @@ jobs:
       github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch' &&
       (contains(github.event.inputs.platforms, 'win') || github.event.inputs.platforms == 'all' || github.event.inputs.platforms == '')
-    # windows-2022 = VS 2022 (stable for native rebuilds). windows-latest may be VS 2026;
-    # package.json overrides node-gyp to 12.x which understands 2022 and 2026.
+    # Pin windows-2022 (VS 2022). Do NOT use msvc-dev-cmd here: it sets
+    # VCINSTALLDIR and node-gyp then rejects every VS install on path mismatch.
+    # package.json overrides node-gyp → 12.x (VS 2022 + 2026 detection).
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
+      - name: Show commit (must be latest main for this fix)
+        shell: pwsh
+        run: |
+          git log -1 --oneline
+          git rev-parse HEAD
       - uses: actions/setup-node@v4
         with:
-          # node-gyp 12 requires Node ^20.17 or >=22.9; use 22 LTS for CI.
+          # node-gyp 12 requires Node ^20.17 or >=22.9
           node-version: '22'
           cache: npm
-      # Put cl.exe / Windows SDK on PATH for the actual compile.
-      # Default pwsh shell — bash on Windows shadows link.exe and breaks MSVC.
-      - uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
-      - name: Locate Visual Studio for node-gyp
-        shell: pwsh
-        run: |
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          if (-not (Test-Path $vswhere)) { throw "vswhere.exe missing" }
-          $vsPath = & $vswhere -latest -products * `
-            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
-            -property installationPath
-          if (-not $vsPath) { throw "No VS install with VC.Tools.x86.x64" }
-          $vsPath = $vsPath.Trim()
-          Write-Host "VS installationPath=$vsPath"
-          # node-gyp treats VCINSTALLDIR's parent as a strict match against the
-          # install path. msvc-dev-cmd sometimes sets a nested toolset path which
-          # makes every candidate fail ("Could not find any Visual Studio...").
-          # Point it at the VS root\VC and pass the full path as msvs_version.
-          $vcDir = Join-Path $vsPath 'VC'
-          "VCINSTALLDIR=$vcDir" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "npm_config_msvs_version=$vsPath" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          if (-not (Get-Command cl.exe -ErrorAction SilentlyContinue)) {
-            throw "cl.exe not on PATH after msvc-dev-cmd"
-          }
-          cl.exe 2>&1 | Select-Object -First 3
       - name: Install dependencies
         run: npm ci
-      - name: Rebuild node-pty for Electron
+      - name: Verify node-gyp override (must be 12+)
         shell: pwsh
         run: |
-          Write-Host "VCINSTALLDIR=$env:VCINSTALLDIR"
-          Write-Host "npm_config_msvs_version=$env:npm_config_msvs_version"
-          npm run rebuild:pty
+          node -e "const p=require('node-gyp/package.json'); console.log('node-gyp', p.version, require.resolve('node-gyp/package.json')); const m=+p.version.split('.')[0]; if(m<12) process.exit(1)"
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (Test-Path $vswhere) {
+            & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+              -format json | ConvertFrom-Json | ForEach-Object {
+                Write-Host "VS $($_.installationVersion) at $($_.installationPath)"
+              }
+          } else {
+            throw "vswhere.exe missing on runner"
+          }
+      - name: Rebuild node-pty for Electron
+        shell: pwsh
+        run: npm run rebuild:pty
+        env:
+          # Year only — full paths with spaces break some node-gyp paths.
+          # scripts/rebuild-pty.mjs also clears VCINSTALLDIR if present.
+          npm_config_msvs_version: '2022'
       - name: Build Windows installers
         run: npm run dist:win
+        env:
+          npm_config_msvs_version: '2022'
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
