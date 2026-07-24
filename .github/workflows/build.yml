@@ -60,19 +60,28 @@ jobs:
         with:
           node-version: '20'
           cache: npm
-      # node-pty / node-gyp need MSVC on Windows
+      # node-pty / node-gyp need MSVC + Windows SDK on the PATH.
+      # Must run before npm ci / rebuild; keep default PowerShell shell so
+      # INCLUDE/LIB/PATH from this action are not lost (bash on Windows breaks paths).
       - uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
       - name: Install dependencies
         run: npm ci
+        env:
+          npm_config_msvs_version: '2022'
+          GYP_MSVS_VERSION: '2022'
       - name: Rebuild node-pty for Electron
         run: npm run rebuild:pty
         env:
           npm_config_msvs_version: '2022'
+          GYP_MSVS_VERSION: '2022'
       - name: Build Windows installers
+        # Use default pwsh shell — inherits MSVC env from msvc-dev-cmd
         run: npm run dist:win
-        shell: bash
+        env:
+          npm_config_msvs_version: '2022'
+          GYP_MSVS_VERSION: '2022'
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -99,17 +108,28 @@ jobs:
         with:
           node-version: '20'
           cache: npm
-      # Python 3.12+ dropped distutils; node-gyp still imports it
-      - name: Install setuptools (distutils for node-gyp)
-        run: python3 -m pip install --user setuptools
+      # Python 3.12+ dropped distutils; node-gyp still imports StrictVersion from it.
+      # Prefer Python 3.11 (still has distutils) + setuptools as a belt-and-suspenders.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install setuptools for node-gyp
+        run: |
+          python -m pip install --upgrade pip setuptools
+          python -c "from distutils.version import StrictVersion; print('distutils ok', StrictVersion('1.0'))"
       - name: Install dependencies
         run: npm ci
+        env:
+          npm_config_python: python
       - name: Rebuild node-pty for Electron
         run: npm run rebuild:pty
+        env:
+          npm_config_python: python
       - name: Build macOS DMG
         run: npm run dist:mac
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          npm_config_python: python
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -135,16 +155,29 @@ jobs:
         with:
           node-version: '20'
           cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
       - name: Install system deps
         run: |
           sudo apt-get update
           sudo apt-get install -y rpm fakeroot dpkg
+      - name: Install setuptools for node-gyp
+        run: |
+          python -m pip install --upgrade pip setuptools
+          python -c "from distutils.version import StrictVersion; print('distutils ok')"
       - name: Install dependencies
         run: npm ci
+        env:
+          npm_config_python: python
       - name: Rebuild node-pty for Electron
         run: npm run rebuild:pty
+        env:
+          npm_config_python: python
       - name: Build Linux packages
         run: npm run dist:linux
+        env:
+          npm_config_python: python
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
         with:
