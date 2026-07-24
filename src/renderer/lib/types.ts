@@ -17,6 +17,10 @@ export type ChatMessage = {
 export type Session = {
   /** Official Grok session UUID (also used as UI id). */
   id: string
+  /**
+   * Raw title from disk metadata / prompt snippet.
+   * Prefer {@link sessionDisplayTitle} for UI so empty shells use i18n.
+   */
   title: string
   cwd: string
   projectName: string
@@ -27,6 +31,22 @@ export type Session = {
   onDisk?: boolean
   modelId?: string | null
   effort?: string | null
+  /**
+   * Shell-only / no real user chat (from main process, locale-neutral).
+   * Sidebar hides these by default; titles use i18n when shown.
+   */
+  empty?: boolean
+}
+
+/** Localized label for sidebar / search rows. */
+export function sessionDisplayTitle(
+  s: Pick<Session, 'title' | 'empty'>,
+  t: (key: 'emptySession' | 'newTask') => string,
+): string {
+  if (s.empty) return t('emptySession')
+  const title = (s.title || '').trim()
+  if (title) return title
+  return t('newTask')
 }
 
 export function newSessionId(): string {

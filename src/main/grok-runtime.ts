@@ -39,6 +39,10 @@ export type ModelsCatalog = {
 
 export type SessionListItem = {
   id: string
+  /**
+   * Display title from Grok metadata / first user prompt.
+   * Empty string when {@link empty} is true — UI localizes the placeholder.
+   */
   title: string
   cwd: string
   projectName: string
@@ -46,6 +50,11 @@ export type SessionListItem = {
   modelId: string | null
   effort: string | null
   messageCount: number
+  /**
+   * Locale-neutral: no generated_title / session_summary / real user turn.
+   * UI decides whether to hide or show with an i18n label.
+   */
+  empty: boolean
 }
 
 export type SessionHistoryMessage = {
@@ -299,7 +308,19 @@ export class GrokRuntime {
             Date.parse(summary.last_active_at || '') ||
             Date.parse(summary.created_at || '') ||
             0
-          const title = resolveSessionTitle(summary, sessionDir, id, ts)
+
+          // Detect shell-only / aborted sessions (locale-neutral metadata).
+          // Grok often records num_chat_messages=2 (system + skill injection) with no real chat.
+          // Do NOT invent language-specific titles here — renderer uses i18n for empty rows.
+          const generated = (summary.generated_title || '').trim()
+          const sessionSummary = (summary.session_summary || '').trim()
+          const fromPrompt =
+            generated || sessionSummary ? null : firstUserPromptSnippet(sessionDir)
+          const empty = !generated && !sessionSummary && !fromPrompt
+          const title = empty
+            ? ''
+            : clampTitle(generated || sessionSummary || fromPrompt || '')
+
           items.push({
             id,
             title,
@@ -309,6 +330,7 @@ export class GrokRuntime {
             modelId: summary.current_model_id || null,
             effort: summary.reasoning_effort || null,
             messageCount: summary.num_chat_messages ?? summary.num_messages ?? 0,
+            empty,
           })
         } catch {
           // skip corrupt summary
@@ -800,6 +822,7 @@ export class GrokRuntime {
       encoding: 'utf8',
       timeout: timeoutMs,
       env: process.env,
+      windowsHide: true,
     })
     if (r.error) throw r.error
     return (r.stdout || r.stderr || '').toString()
@@ -815,6 +838,7 @@ export class GrokRuntime {
       const child = spawn(bin, args, {
         env: process.env,
         cwd: cwd && existsSync(cwd) ? cwd : undefined,
+        windowsHide: true,
       })
       let out = ''
       let err = ''
@@ -851,6 +875,8 @@ export class GrokRuntime {
       const child = spawn(bin, args, {
         env: process.env,
         shell: false,
+        // Hide console flash; install/login still stream stdout/stderr via pipes
+        windowsHide: true,
       })
 
       const timer = setTimeout(() => {
@@ -899,6 +925,10 @@ export class GrokRuntime {
       permissionMode?: string
       /** When true, continue an existing Grok session; when false, create with -s */
       resume?: boolean
+      /** Inline vision images for --prompt-json (base64, no data: prefix). */
+      images?: Array<{ mimeType: string; data: string; path?: string }>
+      /** Extra non-image file paths (already merged into prompt by renderer when possible). */
+      filePaths?: string[]
     } = {},
   ): Promise<void> {
     if (this.children.has(sessionId)) {
@@ -932,9 +962,63 @@ export class GrokRuntime {
     const permissionMode = (opts.permissionMode || 'default').trim()
     const resume = Boolean(opts.resume)
 
-    const args = [
-      '-p',
-      prompt,
+    const images = (opts.images || []).filter(
+      (im) => im && typeof im.data === 'string' && im.data.length > 0,
+    )
+
+    // Prefer --prompt-json with ACP image blocks when payload fits CLI arg limits.
+    // Windows CreateProcess ~32k; leave headroom for other flags.
+    const MAX_PROMPT_JSON = 28_000
+    let usePromptJson = false
+    let promptJson = ''
+    if (images.length > 0) {
+      const tagLines = images
+        .map((im, i) =>
+          im.path
+            ? `[Image #${i + 1}] (${im.path} — attached inline; act on the path if needed, but do not Read it)`
+            : `[Image #${i + 1}] (attached inline — already visible to you; do not read it from disk)`,
+        )
+        .join('\n')
+      const textBody = [prompt.trim(), tagLines].filter(Boolean).join('\n\n')
+      const blocks: Array<
+        | { type: 'text'; text: string }
+        | { type: 'image'; mimeType: string; data: string }
+      > = [
+        {
+          type: 'text',
+          text: textBody || 'Please examine the attached image(s).',
+        },
+      ]
+      for (const im of images) {
+        let mime = (im.mimeType || 'image/png').toLowerCase()
+        if (mime === 'image/jpg') mime = 'image/jpeg'
+        blocks.push({ type: 'image', mimeType: mime, data: im.data })
+      }
+      promptJson = JSON.stringify(blocks)
+      usePromptJson = promptJson.length <= MAX_PROMPT_JSON
+    }
+
+    // Large images: fall back to path mentions so the model can read_file (vision).
+    let finalPrompt = prompt
+    if (images.length > 0 && !usePromptJson) {
+      const pathLines = images
+        .map((im, i) => {
+          const p = im.path || ''
+          return p
+            ? `[Image #${i + 1}] ${p} (user-attached image — use read_file to view it)`
+            : `[Image #${i + 1}] (image omitted: payload too large for inline send)`
+        })
+        .join('\n')
+      finalPrompt = [pathLines, prompt.trim()].filter(Boolean).join('\n\n')
+    }
+
+    const args: string[] = []
+    if (usePromptJson) {
+      args.push('--prompt-json', promptJson)
+    } else {
+      args.push('-p', finalPrompt)
+    }
+    args.push(
       '--output-format',
       'streaming-json',
       '-m',
@@ -943,7 +1027,7 @@ export class GrokRuntime {
       effort,
       '--permission-mode',
       permissionMode,
-    ]
+    )
 
     if (resume) {
       args.push('--resume', sessionId)
@@ -956,13 +1040,19 @@ export class GrokRuntime {
     const child = spawn(boot.binaryPath, args, {
       cwd: workCwd,
       env: { ...process.env, FORCE_COLOR: '0' },
+      windowsHide: true,
     })
 
     const modeTag = resume ? `--resume ${sessionId}` : `-s ${sessionId}`
+    const imgTag = images.length
+      ? usePromptJson
+        ? ` images=${images.length} (prompt-json)`
+        : ` images=${images.length} (path-fallback)`
+      : ''
     this.emit({
       type: 'stderr',
       sessionId,
-      line: `[desktop] grok ${modeTag} -m ${model} --effort ${effort} --permission-mode ${permissionMode} --cwd ${workCwd}`,
+      line: `[desktop] grok ${modeTag} -m ${model} --effort ${effort} --permission-mode ${permissionMode} --cwd ${workCwd}${imgTag}`,
     })
 
     this.children.set(sessionId, child)
@@ -1154,6 +1244,7 @@ export class GrokRuntime {
       const child = spawn(bin, args, {
         env: process.env,
         cwd: cwd && existsSync(cwd) ? cwd : undefined,
+        windowsHide: true,
       })
       let out = ''
       let err = ''
@@ -1327,55 +1418,10 @@ function shouldSkipUserHistory(text: string): boolean {
   return false
 }
 
-/**
- * Title priority (matches Grok Build metadata when present):
- * 1. generated_title
- * 2. session_summary
- * 3. first real user prompt from chat_history.jsonl
- * 4. empty shell session label (opened TUI, no real chat)
- *
- * Many "Untitled" rows are sessions Grok never auto-titled — short/aborted
- * sessions often have empty generated_title + session_summary.
- */
-function resolveSessionTitle(
-  summary: {
-    generated_title?: string
-    session_summary?: string
-  },
-  sessionDir: string,
-  sessionId: string,
-  updatedAtMs: number,
-): string {
-  const generated = (summary.generated_title || '').trim()
-  if (generated) return clampTitle(generated)
-
-  const summ = (summary.session_summary || '').trim()
-  if (summ) return clampTitle(summ)
-
-  const fromPrompt = firstUserPromptSnippet(sessionDir)
-  if (fromPrompt) return clampTitle(fromPrompt)
-
-  const when = formatShortDate(updatedAtMs)
-  const shortId = sessionId.slice(0, 8)
-  return when ? `空会话 · ${when}` : `空会话 · ${shortId}`
-}
-
 function clampTitle(text: string, max = 56): string {
   const oneLine = text.replace(/\s+/g, ' ').trim()
   if (oneLine.length <= max) return oneLine
   return `${oneLine.slice(0, max - 1)}…`
-}
-
-function formatShortDate(ms: number): string {
-  if (!ms || !Number.isFinite(ms)) return ''
-  try {
-    const d = new Date(ms)
-    const m = d.getMonth() + 1
-    const day = d.getDate()
-    return `${m}/${day}`
-  } catch {
-    return ''
-  }
 }
 
 /** First non-injected user message text for sidebar title fallback. */

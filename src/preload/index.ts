@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, webFrame } from 'electron'
+import { contextBridge, ipcRenderer, webFrame, webUtils } from 'electron'
 
 export type BootstrapPhase =
   | 'checking'
@@ -53,6 +53,7 @@ export type ModelsCatalog = {
 
 export type SessionListItem = {
   id: string
+  /** Empty when `empty` is true; UI localizes the placeholder. */
   title: string
   cwd: string
   projectName: string
@@ -60,6 +61,8 @@ export type SessionListItem = {
   modelId: string | null
   effort: string | null
   messageCount: number
+  /** No real user chat — UI may hide or label via i18n. */
+  empty: boolean
 }
 
 export type SessionHistoryMessage = {
@@ -192,6 +195,8 @@ const api = {
       effort?: string
       permissionMode?: string
       resume?: boolean
+      images?: Array<{ mimeType: string; data: string; path?: string }>
+      filePaths?: string[]
     }): Promise<{ ok: boolean }> => ipcRenderer.invoke('grok:prompt', payload),
     stop: (sessionId: string): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('grok:stop', sessionId),
@@ -281,6 +286,41 @@ const api = {
   },
   dialog: {
     pickDirectory: (): Promise<string | null> => ipcRenderer.invoke('dialog:pickDirectory'),
+    pickFiles: (): Promise<string[] | null> => ipcRenderer.invoke('dialog:pickFiles'),
+  },
+  /**
+   * Attachment helpers for paste / drag-drop.
+   * `getPathForFile` must run in the preload (Electron webUtils).
+   */
+  files: {
+    getPathForFile: (file: File): string => {
+      try {
+        return webUtils.getPathForFile(file) || ''
+      } catch {
+        return ''
+      }
+    },
+    saveClipboardImage: (payload: {
+      base64: string
+      mimeType?: string
+      name?: string
+    }): Promise<{
+      ok: boolean
+      path?: string
+      mimeType?: string
+      size?: number
+      error?: string
+    }> => ipcRenderer.invoke('fs:saveClipboardImage', payload),
+    readImageBase64: (
+      filePath: string,
+    ): Promise<{
+      ok: boolean
+      base64?: string
+      mimeType?: string
+      size?: number
+      name?: string
+      error?: string
+    }> => ipcRenderer.invoke('fs:readImageBase64', filePath),
   },
   ui: {
     getZoomFactor: (): number => webFrame.getZoomFactor(),

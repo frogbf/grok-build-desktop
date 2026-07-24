@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ACCESS_TO_PERMISSION,
   DEFAULT_MODEL,
@@ -8,7 +8,18 @@ import {
   type AccessUi,
   type ModelOption,
 } from '../lib/agent-options'
+import {
+  MAX_VISION_IMAGE_BYTES,
+  basenamePath,
+  dataUrlToBase64,
+  isVisionMime,
+  isVisionPath,
+  mimeFromName,
+  readFileAsDataUrl,
+  type ComposerAttachment,
+} from '../lib/attachments'
 import type { MessageKey } from '../i18n/locales/zh'
+import { uid } from '../lib/types'
 import './Composer.css'
 
 export type PromptOptions = {
@@ -16,6 +27,12 @@ export type PromptOptions = {
   effort: string
   access: AccessUi
   permissionMode: string
+}
+
+export type SubmitPayload = {
+  text: string
+  attachments: ComposerAttachment[]
+  opts: PromptOptions
 }
 
 type Props = {
@@ -26,7 +43,7 @@ type Props = {
   models: ModelOption[]
   defaultModel?: string
   t: (key: MessageKey) => string
-  onSubmit: (text: string, opts: PromptOptions) => void
+  onSubmit: (payload: SubmitPayload) => void
   onStop?: () => void
   onPickProject?: () => void
 }
@@ -65,12 +82,16 @@ export function Composer({
       ]
 
   const [value, setValue] = useState('')
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([])
+  const [dragOver, setDragOver] = useState(false)
+  const [attachError, setAttachError] = useState<string | null>(null)
   const [modelId, setModelId] = useState<string>(defaultModel || modelList[0].id)
   const [effort, setEffort] = useState<string>(() =>
     defaultEffortFor(modelList.find((m) => m.id === (defaultModel || modelList[0].id))),
   )
   const [access, setAccess] = useState<AccessUi>('ask')
   const ref = useRef<HTMLTextAreaElement>(null)
+  const dragDepth = useRef(0)
 
   const activeModel = useMemo(
     () => modelList.find((m) => m.id === modelId) || modelList[0],
@@ -95,6 +116,247 @@ export function Composer({
     if (floating) ref.current?.focus()
   }, [floating])
 
+  const revokePreview = (url?: string) => {
+    if (url && url.startsWith('blob:')) URL.revokeObjectURL(url)
+  }
+
+  // Revoke blob previews on unmount
+  useEffect(() => {
+    return () => {
+      for (const a of attachments) revokePreview(a.previewUrl)
+    }
+    // only on unmount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const removeAttachment = useCallback((id: string) => {
+    setAttachments((list) => {
+      const hit = list.find((a) => a.id === id)
+      revokePreview(hit?.previewUrl)
+      return list.filter((a) => a.id !== id)
+    })
+  }, [])
+
+  const addAttachments = useCallback((items: ComposerAttachment[]) => {
+    if (!items.length) return
+    setAttachError(null)
+    setAttachments((list) => {
+      const next = [...list]
+      for (const item of items) {
+        // de-dupe by path or base64 head
+        const exists = next.some(
+          (a) =>
+            (item.path && a.path === item.path) ||
+            (item.base64 && a.base64 && a.base64.slice(0, 64) === item.base64.slice(0, 64)),
+        )
+        if (!exists) next.push(item)
+      }
+      return next
+    })
+  }, [])
+
+  const ingestFiles = useCallback(
+    async (files: FileList | File[]) => {
+      if (disabled || running) return
+      const list = Array.from(files)
+      if (!list.length) return
+
+      const added: ComposerAttachment[] = []
+      let err: string | null = null
+
+      for (const file of list) {
+        const path =
+          typeof window.grokDesktop?.files?.getPathForFile === 'function'
+            ? window.grokDesktop.files.getPathForFile(file)
+            : ''
+        const mime = file.type || mimeFromName(file.name || path) || ''
+        const size = file.size || 0
+        const vision =
+          isVisionMime(mime) || (path ? isVisionPath(path) : isVisionPath(file.name || ''))
+
+        if (vision) {
+          if (size > MAX_VISION_IMAGE_BYTES) {
+            err = t('attachTooLarge')
+            continue
+          }
+          try {
+            let base64: string | undefined
+            let mimeType = mime || 'image/png'
+            let savedPath = path || undefined
+            let previewUrl: string | undefined
+
+            if (path) {
+              const res = await window.grokDesktop.files.readImageBase64(path)
+              if (res.ok && res.base64) {
+                base64 = res.base64
+                mimeType = res.mimeType || mimeType
+              } else {
+                // Fall back to FileReader if main cannot read
+                const dataUrl = await readFileAsDataUrl(file)
+                const parsed = dataUrlToBase64(dataUrl)
+                if (parsed) {
+                  base64 = parsed.base64
+                  mimeType = parsed.mimeType
+                }
+                previewUrl = dataUrl
+              }
+              if (!previewUrl && base64) {
+                previewUrl = `data:${mimeType};base64,${base64}`
+              }
+            } else {
+              // Clipboard / no path: read bytes, save to temp for path fallback
+              const dataUrl = await readFileAsDataUrl(file)
+              const parsed = dataUrlToBase64(dataUrl)
+              if (!parsed) {
+                err = t('attachFailed')
+                continue
+              }
+              base64 = parsed.base64
+              mimeType = parsed.mimeType
+              previewUrl = dataUrl
+              const saved = await window.grokDesktop.files.saveClipboardImage({
+                base64,
+                mimeType,
+                name: file.name || 'paste',
+              })
+              if (saved.ok && saved.path) savedPath = saved.path
+            }
+
+            if (!base64 && !savedPath) {
+              err = t('attachFailed')
+              continue
+            }
+
+            added.push({
+              id: uid('att'),
+              kind: 'image',
+              name: file.name || basenamePath(savedPath || 'image.png'),
+              path: savedPath,
+              mimeType,
+              size: size || undefined,
+              previewUrl,
+              base64,
+            })
+          } catch {
+            err = t('attachFailed')
+          }
+        } else {
+          // Non-image: need a path so the model can open it
+          if (!path) {
+            err = t('attachNeedPath')
+            continue
+          }
+          added.push({
+            id: uid('att'),
+            kind: 'file',
+            name: file.name || basenamePath(path),
+            path,
+            mimeType: mime || undefined,
+            size: size || undefined,
+          })
+        }
+      }
+
+      if (added.length) addAttachments(added)
+      if (err) setAttachError(err)
+    },
+    [addAttachments, disabled, running, t],
+  )
+
+  const ingestPaths = useCallback(
+    async (paths: string[]) => {
+      if (disabled || running || !paths.length) return
+      const added: ComposerAttachment[] = []
+      let err: string | null = null
+
+      for (const filePath of paths) {
+        if (!filePath) continue
+        if (isVisionPath(filePath)) {
+          const res = await window.grokDesktop.files.readImageBase64(filePath)
+          if (!res.ok || !res.base64) {
+            err = res.error || t('attachFailed')
+            // still attach as path file so model can read
+            added.push({
+              id: uid('att'),
+              kind: 'file',
+              name: basenamePath(filePath),
+              path: filePath,
+            })
+            continue
+          }
+          if ((res.size || 0) > MAX_VISION_IMAGE_BYTES) {
+            err = t('attachTooLarge')
+            continue
+          }
+          const mimeType = res.mimeType || mimeFromName(filePath) || 'image/png'
+          added.push({
+            id: uid('att'),
+            kind: 'image',
+            name: res.name || basenamePath(filePath),
+            path: filePath,
+            mimeType,
+            size: res.size,
+            previewUrl: `data:${mimeType};base64,${res.base64}`,
+            base64: res.base64,
+          })
+        } else {
+          added.push({
+            id: uid('att'),
+            kind: 'file',
+            name: basenamePath(filePath),
+            path: filePath,
+          })
+        }
+      }
+
+      if (added.length) addAttachments(added)
+      if (err) setAttachError(err)
+    },
+    [addAttachments, disabled, running, t],
+  )
+
+  const onPaste = useCallback(
+    async (e: React.ClipboardEvent) => {
+      if (disabled || running) return
+      const cd = e.clipboardData
+      if (!cd) return
+
+      // Prefer image items (screenshots / "Copy Image")
+      const imageItems = Array.from(cd.items || []).filter(
+        (it) => it.kind === 'file' && it.type.startsWith('image/'),
+      )
+      const files = Array.from(cd.files || [])
+
+      if (imageItems.length || files.some((f) => f.type.startsWith('image/') || isVisionPath(f.name))) {
+        e.preventDefault()
+        if (files.length) {
+          await ingestFiles(files)
+        } else {
+          const blobFiles: File[] = []
+          for (const it of imageItems) {
+            const f = it.getAsFile()
+            if (f) blobFiles.push(f)
+          }
+          if (blobFiles.length) await ingestFiles(blobFiles)
+        }
+        return
+      }
+
+      // Copied files from Explorer (often file paths as text on some platforms)
+      if (files.length) {
+        e.preventDefault()
+        await ingestFiles(files)
+      }
+    },
+    [disabled, ingestFiles, running],
+  )
+
+  const onPickFiles = async () => {
+    if (disabled || running) return
+    const paths = await window.grokDesktop.dialog.pickFiles()
+    if (paths?.length) await ingestPaths(paths)
+  }
+
   const cycleModel = () => {
     if (modelList.length <= 1) return
     const ids = modelList.map((m) => m.id)
@@ -109,16 +371,29 @@ export function Composer({
     setEffort(next)
   }
 
+  const canSend =
+    !disabled && !running && (Boolean(value.trim()) || attachments.length > 0)
+
   const submit = () => {
+    if (!canSend) return
     const text = value.trim()
-    if (!text || disabled || running) return
-    onSubmit(text, {
-      model: modelId,
-      effort,
-      access,
-      permissionMode: ACCESS_TO_PERMISSION[access],
+    // Allow image-only send
+    if (!text && attachments.length === 0) return
+
+    onSubmit({
+      text,
+      attachments: [...attachments],
+      opts: {
+        model: modelId,
+        effort,
+        access,
+        permissionMode: ACCESS_TO_PERMISSION[access],
+      },
     })
     setValue('')
+    for (const a of attachments) revokePreview(a.previewUrl)
+    setAttachments([])
+    setAttachError(null)
     if (ref.current) ref.current.style.height = 'auto'
   }
 
@@ -135,7 +410,68 @@ export function Composer({
         </button>
       )}
 
-      <div className={`composer-card ${running ? 'running' : ''}`}>
+      <div
+        className={`composer-card ${running ? 'running' : ''} ${dragOver ? 'drag-over' : ''}`}
+        onDragEnter={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          dragDepth.current += 1
+          setDragOver(true)
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          dragDepth.current = Math.max(0, dragDepth.current - 1)
+          if (dragDepth.current === 0) setDragOver(false)
+        }}
+        onDragOver={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+        }}
+        onDrop={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          dragDepth.current = 0
+          setDragOver(false)
+          if (e.dataTransfer?.files?.length) {
+            void ingestFiles(e.dataTransfer.files)
+          }
+        }}
+      >
+        {dragOver && (
+          <div className="composer-drop-overlay" aria-hidden>
+            {t('dropToAttach')}
+          </div>
+        )}
+
+        {attachments.length > 0 && (
+          <div className="composer-attachments" aria-label={t('attachments')}>
+            {attachments.map((a) => (
+              <div key={a.id} className={`attach-chip kind-${a.kind}`} title={a.path || a.name}>
+                {a.kind === 'image' && a.previewUrl ? (
+                  <img src={a.previewUrl} alt="" className="attach-thumb" draggable={false} />
+                ) : (
+                  <span className="attach-file-icon">
+                    <IconFile />
+                  </span>
+                )}
+                <span className="attach-name truncate">{a.name}</span>
+                <button
+                  type="button"
+                  className="attach-remove"
+                  aria-label={t('removeAttachment')}
+                  onClick={() => removeAttachment(a.id)}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {attachError ? <div className="composer-attach-error">{attachError}</div> : null}
+
         <textarea
           ref={ref}
           rows={floating ? 2 : 1}
@@ -147,6 +483,9 @@ export function Composer({
             e.target.style.height = 'auto'
             e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`
           }}
+          onPaste={(e) => {
+            void onPaste(e)
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault()
@@ -157,7 +496,13 @@ export function Composer({
 
         <div className="composer-toolbar">
           <div className="toolbar-left">
-            <button type="button" className="tool-btn" title="+" disabled>
+            <button
+              type="button"
+              className="tool-btn"
+              title={t('attachFiles')}
+              disabled={disabled || running}
+              onClick={() => void onPickFiles()}
+            >
               +
             </button>
             <button
@@ -205,7 +550,7 @@ export function Composer({
               <button
                 type="button"
                 className="send-btn"
-                disabled={disabled || !value.trim()}
+                disabled={!canSend}
                 onClick={submit}
                 aria-label="Send"
               >
@@ -251,6 +596,14 @@ function IconStop() {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
       <rect x="6" y="6" width="12" height="12" rx="2" />
+    </svg>
+  )
+}
+function IconFile() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+      <path d="M14 2v6h6" />
     </svg>
   )
 }

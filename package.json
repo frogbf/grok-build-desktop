@@ -14,8 +14,13 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "postinstall": "electron-builder install-app-deps || true",
     "rebuild:pty": "npx @electron/rebuild -f -w node-pty",
+    "icons:ico": "node scripts/generate-ico.mjs",
     "pack": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder"
+    "pack:win": "npm run build && electron-builder --dir --win",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run icons:ico && npm run rebuild:pty && npm run build && electron-builder --win --x64",
+    "dist:mac": "npm run rebuild:pty && npm run build && electron-builder --mac",
+    "dist:linux": "npm run rebuild:pty && npm run build && electron-builder --linux"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",
@@ -41,6 +46,7 @@
   "build": {
     "appId": "com.community.grok-build-desktop",
     "productName": "Grok Build Desktop",
+    "copyright": "Copyright © community Grok Build Desktop contributors",
     "directories": {
       "output": "release",
       "buildResources": "resources"
@@ -49,6 +55,7 @@
       "out/**/*",
       "package.json",
       "resources/icon.png",
+      "resources/icon.ico",
       "resources/icon-256.png",
       "resources/icon-128.png",
       "resources/icon-64.png",
@@ -59,10 +66,21 @@
     ],
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Grok Build Desktop"
+      "shortcutName": "Grok Build Desktop",
+      "uninstallDisplayName": "Grok Build Desktop",
+      "installerIcon": "resources/icon.ico",
+      "uninstallerIcon": "resources/icon.ico",
+      "installerHeaderIcon": "resources/icon.ico",
+      "deleteAppDataOnUninstall": false,
+      "license": "LICENSE"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
     },
     "linux": {
       "icon": "resources/icon.png",
@@ -80,10 +98,23 @@
       "category": "public.app-category.developer-tools"
     },
     "win": {
-      "icon": "resources/icon.png",
+      "icon": "resources/icon.ico",
       "target": [
-        "nsis"
-      ]
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "requestedExecutionLevel": "asInvoker"
     }
   }
 }

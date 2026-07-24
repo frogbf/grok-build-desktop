@@ -1,5 +1,6 @@
 import type { AccountSubscription } from '../../preload/index'
 import type { Session } from '../lib/types'
+import { sessionDisplayTitle } from '../lib/types'
 import type { MessageKey } from '../i18n/locales/zh'
 import { UserMenu } from './UserMenu'
 import './Sidebar.css'
@@ -114,18 +115,21 @@ export function Sidebar({
               <span className="project-name">{g.name}</span>
             </button>
             <div className="thread-list">
-              {g.sessions.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  className={`thread-item ${s.id === activeId ? 'active' : ''}`}
-                  onClick={() => onSelect(s.id)}
-                  title={s.title}
-                >
-                  <span className="thread-title">{s.title || t('newTask')}</span>
-                  <span className="thread-time">{relTime(s.updatedAt)}</span>
-                </button>
-              ))}
+              {g.sessions.map((s) => {
+                const label = sessionDisplayTitle(s, t)
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className={`thread-item ${s.id === activeId ? 'active' : ''}`}
+                    onClick={() => onSelect(s.id)}
+                    title={label}
+                  >
+                    <span className="thread-title">{label}</span>
+                    <span className="thread-time">{relTime(s.updatedAt)}</span>
+                  </button>
+                )
+              })}
             </div>
           </div>
         ))}

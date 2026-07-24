@@ -66,35 +66,49 @@ The in-app setup gate can also run the official install script after confirmatio
 | `npm run build` | Compile main / preload / renderer |
 | `npm run typecheck` | Typecheck both TS projects |
 | `npm run rebuild:pty` | Rebuild `node-pty` for the current Electron ABI |
+| `npm run icons:ico` | Generate `resources/icon.ico` from PNGs (Windows) |
 | `npm run pack` | Build + electron-builder `--dir` (unpacked app) |
+| `npm run pack:win` | Unpacked Windows app dir only |
 | `npm run dist` | Build + platform installers |
+| `npm run dist:win` | Windows NSIS + portable (`x64`; rebuilds pty + ico) |
+| `npm run dist:mac` | macOS DMG |
+| `npm run dist:linux` | Linux AppImage + deb |
 
 ## Packaging
 
 Installers are **platform-specific**. Prefer building **on the target OS** (native modules such as `node-pty` do not cross-compile cleanly).
 
 ```bash
-# On Windows
+# On Windows (recommended one-shot)
 npm ci
-npm run rebuild:pty
-npm run dist -- --win
+npm run dist:win
 
 # On macOS
 npm ci
-npm run rebuild:pty
-npm run dist -- --mac
+npm run dist:mac
 
 # On Linux
 npm ci
-npm run rebuild:pty
-npm run dist -- --linux
+npm run dist:linux
 ```
+
+### Windows notes
+
+| Topic | Detail |
+|-------|--------|
+| **Build tools** | Visual Studio **Build Tools** (C++ workload) + Python are required to rebuild `node-pty` |
+| **Targets** | **NSIS** installer + **portable** `.exe` (x64) |
+| **Icons** | `npm run icons:ico` writes multi-size `resources/icon.ico` (also run by `dist:win`) |
+| **Shell integration** | `appId` / `AppUserModelId` = `com.community.grok-build-desktop`; single-instance focus |
+| **Code signing** | Not configured yet. Unsigned builds may trigger SmartScreen (“Unknown publisher”) |
+| **Auto-update** | Not wired yet (see Roadmap) |
+| **Runtime deps** | App does **not** bundle the Grok CLI; install via setup gate or [x.ai/cli](https://x.ai/cli) |
 
 Configured targets (see `package.json` → `build`):
 
 | Platform | Targets |
 |----------|---------|
-| Windows | NSIS |
+| Windows | NSIS, portable (x64) |
 | macOS | DMG |
 | Linux | AppImage, deb |
 

@@ -42,6 +42,7 @@ async function git(cwd: string, args: string[]): Promise<{ ok: boolean; out: str
       timeout: 8000,
       maxBuffer: 1024 * 512,
       env: { ...process.env, LANG: 'C', LC_ALL: 'C' },
+      windowsHide: true,
     })
     return { ok: true, out: (stdout || '').trim(), err: (stderr || '').trim() }
   } catch (e) {

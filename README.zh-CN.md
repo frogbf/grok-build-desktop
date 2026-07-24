@@ -66,40 +66,53 @@ irm https://x.ai/cli/install.ps1 | iex
 | `npm run build` | 编译 main / preload / renderer |
 | `npm run typecheck` | 两端 TypeScript 检查 |
 | `npm run rebuild:pty` | 按当前 Electron ABI 重建 `node-pty` |
+| `npm run icons:ico` | 从 PNG 生成 `resources/icon.ico`（Windows） |
 | `npm run pack` | 构建 + electron-builder `--dir`（未打包目录） |
+| `npm run pack:win` | 仅生成 Windows 未打包目录 |
 | `npm run dist` | 构建 + 生成安装包 |
+| `npm run dist:win` | Windows NSIS + portable（x64；含 pty 重建与 ico） |
+| `npm run dist:mac` | macOS DMG |
+| `npm run dist:linux` | Linux AppImage + deb |
 
 ## 打包发布
 
 安装包**按平台区分**。含 `node-pty` 等原生模块时，**建议在目标操作系统上打包**（交叉编译容易出问题）。
 
 ```bash
-# Windows 上
+# Windows（推荐一键）
 npm ci
-npm run rebuild:pty
-npm run dist -- --win
+npm run dist:win
 
-# macOS 上
+# macOS
 npm ci
-npm run rebuild:pty
-npm run dist -- --mac
+npm run dist:mac
 
-# Linux 上
+# Linux
 npm ci
-npm run rebuild:pty
-npm run dist -- --linux
+npm run dist:linux
 ```
+
+### Windows 说明
+
+| 项 | 说明 |
+|----|------|
+| **构建依赖** | 重建 `node-pty` 需要 Visual Studio **Build Tools**（C++ 工作负载）和 Python |
+| **产物** | **NSIS** 安装包 + **portable** 免安装 exe（x64） |
+| **图标** | `npm run icons:ico` 生成多尺寸 `resources/icon.ico`（`dist:win` 会自动执行） |
+| **壳集成** | `appId` / `AppUserModelId` = `com.community.grok-build-desktop`；单实例聚焦 |
+| **代码签名** | 尚未配置。未签名包可能触发 SmartScreen「未知发布者」 |
+| **自动更新** | 尚未接入（见 Roadmap） |
+| **运行时依赖** | 安装包**不**内置 Grok CLI；需通过引导页或 [x.ai/cli](https://x.ai/cli) 安装 |
 
 当前配置目标（见 `package.json` → `build`）：
 
 | 平台 | 产物 |
 |------|------|
-| Windows | NSIS |
+| Windows | NSIS、portable（x64） |
 | macOS | DMG |
 | Linux | AppImage、deb |
 
 输出目录：`release/`。
-
 ## 架构
 
 ```

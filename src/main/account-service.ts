@@ -198,7 +198,11 @@ async function fetchAvatarViaCurl(
         'Accept: image/*,*/*',
         url,
       ],
-      { encoding: 'buffer', maxBuffer: 2 * 1024 * 1024 },
+      {
+        encoding: 'buffer',
+        maxBuffer: 2 * 1024 * 1024,
+        windowsHide: true,
+      },
     )
     return Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout)
   } catch {

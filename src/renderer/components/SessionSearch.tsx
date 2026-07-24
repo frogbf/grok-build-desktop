@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Session } from '../lib/types'
+import { sessionDisplayTitle } from '../lib/types'
 import type { MessageKey } from '../i18n/locales/zh'
 import './SessionSearch.css'
 
@@ -29,15 +30,19 @@ export function SessionSearch({ open, sessions, t, onClose, onSelect }: Props) {
 
   const results = useMemo(() => {
     const ranked = sessions
-      .map((s) => ({
-        s,
-        sc: score(q, s.title || '', s.cwd || '', s.projectName || ''),
-      }))
+      .map((s) => {
+        const title = sessionDisplayTitle(s, t)
+        return {
+          s,
+          title,
+          sc: score(q, title, s.cwd || '', s.projectName || ''),
+        }
+      })
       .filter((x) => x.sc > 0)
       .sort((a, b) => b.sc - a.sc || b.s.updatedAt - a.s.updatedAt)
       .slice(0, 40)
-    return ranked.map((x) => x.s)
-  }, [sessions, q])
+    return ranked.map((x) => ({ s: x.s, title: x.title }))
+  }, [sessions, q, t])
 
   useEffect(() => {
     if (!open) return
@@ -68,7 +73,7 @@ export function SessionSearch({ open, sessions, t, onClose, onSelect }: Props) {
       }
       if (e.key === 'Enter' && results[idx]) {
         e.preventDefault()
-        onSelect(results[idx].id)
+        onSelect(results[idx].s.id)
         onClose()
       }
     }
@@ -99,7 +104,7 @@ export function SessionSearch({ open, sessions, t, onClose, onSelect }: Props) {
           {results.length === 0 ? (
             <div className="session-search-empty">{t('searchNoResults')}</div>
           ) : (
-            results.map((s, i) => (
+            results.map(({ s, title }, i) => (
               <button
                 key={s.id}
                 type="button"
@@ -111,7 +116,7 @@ export function SessionSearch({ open, sessions, t, onClose, onSelect }: Props) {
                 }}
               >
                 <span className="session-search-title">
-                  {s.title || t('newTask')}
+                  {title}
                   {s.status === 'running' ? (
                     <span className="session-search-running">· {t('running')}</span>
                   ) : null}

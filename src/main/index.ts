@@ -5,6 +5,9 @@ import { registerIpc } from './ipc'
 import { GrokRuntime } from './grok-runtime'
 import { TerminalManager } from './terminal-manager'
 
+/** Must match package.json build.appId for Windows taskbar / toast grouping. */
+const APP_USER_MODEL_ID = 'com.community.grok-build-desktop'
+
 // GPU: only disable by default on Linux (remote/VM sandboxes). Win/mac keep HW accel.
 // Override: GROK_DESKTOP_DISABLE_GPU=1 force off; =0 force on (even on Linux).
 const disableGpuEnv = process.env.GROK_DESKTOP_DISABLE_GPU
@@ -20,6 +23,17 @@ if (process.env.GROK_DESKTOP_NO_SANDBOX === '1') {
 // Always allow no-sandbox when explicitly passed via CLI args from npm scripts
 if (process.argv.includes('--no-sandbox')) {
   app.commandLine.appendSwitch('no-sandbox')
+}
+
+// Windows: stable jump-list / taskbar identity (must run before ready when possible)
+if (process.platform === 'win32') {
+  app.setAppUserModelId(APP_USER_MODEL_ID)
+}
+
+// Single instance: second launch focuses the existing window
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) {
+  app.quit()
 }
 
 let mainWindow: BrowserWindow | null = null
@@ -43,7 +57,11 @@ function resolvePreload(): string {
  * BrandMark free / empty-state watermark). Does not follow subscription tier.
  */
 function resolveAppIcon(): string | undefined {
-  const names = ['icon.png', 'icon-free.png', 'icon-256.png']
+  // Prefer .ico on Windows for sharper shell integration
+  const names =
+    process.platform === 'win32'
+      ? ['icon.ico', 'icon.png', 'icon-free.png', 'icon-256.png']
+      : ['icon.png', 'icon-free.png', 'icon-256.png']
   const bases = [
     join(__dirname, '../../resources'),
     join(app.getAppPath(), 'resources'),
@@ -59,6 +77,13 @@ function resolveAppIcon(): string | undefined {
     }
   }
   return undefined
+}
+
+function focusMainWindow(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
 }
 
 function createWindow(): void {
@@ -121,7 +146,7 @@ function createWindow(): void {
   })
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url)
+    void shell.openExternal(url)
     return { action: 'deny' }
   })
 
@@ -135,26 +160,33 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(() => {
-  registerIpc(runtime, terminals)
-
-  ipcMain.handle('window:minimize', () => mainWindow?.minimize())
-  ipcMain.handle('window:maximize', () => {
-    if (!mainWindow) return
-    if (mainWindow.isMaximized()) mainWindow.unmaximize()
-    else mainWindow.maximize()
+if (gotSingleInstanceLock) {
+  app.on('second-instance', () => {
+    focusMainWindow()
   })
-  ipcMain.handle('window:close', () => mainWindow?.close())
 
-  createWindow()
+  app.whenReady().then(() => {
+    registerIpc(runtime, terminals)
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    ipcMain.handle('window:minimize', () => mainWindow?.minimize())
+    ipcMain.handle('window:maximize', () => {
+      if (!mainWindow) return
+      if (mainWindow.isMaximized()) mainWindow.unmaximize()
+      else mainWindow.maximize()
+    })
+    ipcMain.handle('window:close', () => mainWindow?.close())
+
+    createWindow()
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+      else focusMainWindow()
+    })
   })
-})
 
-app.on('window-all-closed', () => {
-  runtime.dispose()
-  terminals.dispose()
-  if (process.platform !== 'darwin') app.quit()
-})
+  app.on('window-all-closed', () => {
+    runtime.dispose()
+    terminals.dispose()
+    if (process.platform !== 'darwin') app.quit()
+  })
+}

@@ -36,6 +36,7 @@
 }
 
 .composer-card {
+  position: relative;
   border-radius: var(--radius-xl);
   background: #1b1b1b;
   border: 1px solid var(--border-default);
@@ -51,6 +52,99 @@
 
 .composer-card.running {
   border-color: rgba(192, 132, 252, 0.28);
+}
+
+.composer-card.drag-over {
+  border-color: rgba(192, 132, 252, 0.55);
+  box-shadow: var(--shadow-card), 0 0 0 3px rgba(192, 132, 252, 0.12);
+}
+
+.composer-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  border-radius: inherit;
+  background: rgba(18, 18, 20, 0.82);
+  color: var(--accent-text, #e9d5ff);
+  font-size: 13px;
+  font-weight: 500;
+  pointer-events: none;
+  letter-spacing: 0.01em;
+}
+
+.composer-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 2px 4px 10px;
+}
+
+.attach-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 200px;
+  height: 36px;
+  padding: 0 6px 0 4px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.attach-chip.kind-image {
+  padding-left: 3px;
+}
+
+.attach-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: #111;
+  flex-shrink: 0;
+}
+
+.attach-file-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  background: var(--bg-chip);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.attach-name {
+  min-width: 0;
+  max-width: 120px;
+}
+
+.attach-remove {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.attach-remove:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.composer-attach-error {
+  padding: 0 4px 6px;
+  font-size: 11.5px;
+  color: var(--danger, #f87171);
 }
 
 .composer-card textarea {
@@ -102,6 +196,11 @@
 .tool-btn:hover:not(:disabled) {
   background: var(--bg-chip);
   color: var(--text-primary);
+}
+
+.tool-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .tool-chip {

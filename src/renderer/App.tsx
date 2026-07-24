@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { TitleBar } from './components/TitleBar'
 import { Sidebar, type ProjectGroup } from './components/Sidebar'
 import { ChatThread } from './components/ChatThread'
-import { Composer, type PromptOptions } from './components/Composer'
+import { Composer, type SubmitPayload } from './components/Composer'
+import {
+  buildTextPromptWithAttachments,
+  type ComposerAttachment,
+} from './lib/attachments'
 import { RightPanel, type PanelMode, type UsageSnapshot } from './components/RightPanel'
 import { TerminalDock } from './components/TerminalDock'
 import { SetupGate } from './components/SetupGate'
@@ -12,6 +16,7 @@ import { SessionSearch } from './components/SessionSearch'
 import {
   basename,
   newSessionId,
+  sessionDisplayTitle,
   uid,
   type ChatMessage,
   type Session,
@@ -28,6 +33,25 @@ import {
 import { useLocale } from './hooks/useLocale'
 import type { AccountSubscription, BootstrapState, GitStatus } from '../preload/index'
 import './App.css'
+
+/** Compact user-bubble text for chat (paths / tags, never base64). */
+function formatUserBubble(text: string, attachments: ComposerAttachment[]): string {
+  const lines: string[] = []
+  let img = 0
+  for (const a of attachments) {
+    if (a.kind === 'image') {
+      img += 1
+      lines.push(a.path ? `[Image #${img}] ${a.name}` : `[Image #${img}] ${a.name}`)
+    } else if (a.path) {
+      lines.push(`📎 ${a.path}`)
+    } else {
+      lines.push(`📎 ${a.name}`)
+    }
+  }
+  const body = text.trim()
+  if (body) lines.push(body)
+  return lines.join('\n') || text
+}
 
 const INITIAL_BOOT: BootstrapState = {
   phase: 'checking',
@@ -220,8 +244,10 @@ export default function App() {
         // Keep in-memory draft sessions that are not yet on disk
         const drafts = prev.filter((s) => !s.onDisk && s.messages.length === 0)
         const draftIds = new Set(drafts.map((s) => s.id))
+        // Main only marks `empty` (locale-neutral). Hide empty shells in the UI
+        // so the sidebar stays useful; display titles use i18n elsewhere.
         const fromDisk: Session[] = items
-          .filter((it) => !draftIds.has(it.id))
+          .filter((it) => !it.empty && !draftIds.has(it.id))
           .map((it) => {
             const existing = prev.find((s) => s.id === it.id)
             // Preserve already-loaded messages / running state
@@ -235,11 +261,12 @@ export default function App() {
                 onDisk: true,
                 modelId: it.modelId,
                 effort: it.effort,
+                empty: it.empty,
               }
             }
             return {
               id: it.id,
-              title: it.title || '—',
+              title: it.title,
               cwd: it.cwd,
               projectName: it.projectName,
               updatedAt: it.updatedAt,
@@ -248,6 +275,7 @@ export default function App() {
               onDisk: true,
               modelId: it.modelId,
               effort: it.effort,
+              empty: it.empty,
             }
           })
         const diskIds = new Set(fromDisk.map((s) => s.id))
@@ -601,17 +629,40 @@ export default function App() {
     return { id: s.id, resume: false, sessionCwd: cwd || s.cwd || '' }
   }
 
-  const onSubmit = async (text: string, opts: PromptOptions) => {
+  const onSubmit = async ({ text, attachments, opts }: SubmitPayload) => {
     if (!ready) {
       setActionMessage(t('needReady'))
       return
     }
     const { id: sessionId, resume, sessionCwd } = ensureSession()
     const now = Date.now()
+
+    // UI bubble: show tags + user text (not full base64)
+    const displayContent = formatUserBubble(text, attachments)
+    const images = attachments
+      .filter((a): a is ComposerAttachment & { base64: string; mimeType: string } =>
+        a.kind === 'image' && Boolean(a.base64) && Boolean(a.mimeType),
+      )
+      .map((a) => ({
+        mimeType: a.mimeType!,
+        data: a.base64!,
+        path: a.path,
+      }))
+    const fileOnly = attachments.filter((a) => a.kind === 'file')
+    // Text for CLI: user prose + file paths. Images ride `images` / path-fallback in main.
+    const wirePrompt =
+      images.length > 0
+        ? buildTextPromptWithAttachments(text, fileOnly)
+        : buildTextPromptWithAttachments(text, attachments)
+    // Image-only send needs non-empty prompt for -p fallback
+    const promptForCli =
+      wirePrompt.trim() ||
+      (images.length ? 'Please examine the attached image(s).' : text)
+
     const userMsg: ChatMessage = {
       id: uid('user'),
       role: 'user',
-      content: text,
+      content: displayContent,
       createdAt: now,
     }
 
@@ -620,7 +671,7 @@ export default function App() {
         if (s.id !== sessionId) return s
         const title =
           s.messages.filter((m) => m.role === 'user').length === 0
-            ? text.slice(0, 42)
+            ? displayContent.slice(0, 42)
             : s.title
         return {
           ...s,
@@ -641,11 +692,12 @@ export default function App() {
     await window.grokDesktop.grok.prompt({
       sessionId,
       cwd: sessionCwd,
-      prompt: text,
+      prompt: promptForCli,
       model: opts.model,
       effort: opts.effort,
       permissionMode: opts.permissionMode,
       resume,
+      images: images.length ? images : undefined,
     })
   }
 
@@ -716,8 +768,8 @@ export default function App() {
             : showSkills
               ? t('skills')
               : ready
-                ? hasMessages
-                  ? active?.title
+                ? hasMessages && active
+                  ? sessionDisplayTitle(active, t)
                   : TIER_LABEL[tier]
                 : t('setup')
         }
