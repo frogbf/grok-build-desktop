@@ -92,6 +92,24 @@ npm ci
 npm run dist:linux
 ```
 
+### GitHub Actions（远程多平台打包）
+
+没有本机 Mac/Linux 也可以。CI 会在各平台原生 runner 上分别打包：
+
+| 触发方式 | 行为 |
+|----------|------|
+| **Actions → Build → Run workflow** | 手动打包（`platforms`：`all` / `win` / `mac` / `linux`） |
+| **推送标签 `v*`**（如 `v0.1.1`） | Win + Mac + Linux → 生成带产物的 **Draft Release** |
+| **Pull request** | 仅 typecheck |
+
+1. 把仓库推到 GitHub（开启 Actions）。
+2. 打开 **Actions** → **Build** → **Run workflow**（或 `git tag v0.1.1 && git push origin v0.1.1`）。
+3. 在运行记录里下载 **Artifacts**（`windows-x64` / `macos` / `linux`），或整理并发布 Draft Release。
+
+默认**不签名**（`CSC_IDENTITY_AUTO_DISCOVERY=false`）。macOS 可能提示「未识别的开发者」，Windows 可能触发 SmartScreen。需要时可再接入签名密钥。
+
+工作流文件：[`.github/workflows/build.yml`](./.github/workflows/build.yml)。
+
 ### Windows 说明
 
 | 项 | 说明 |

@@ -1,0 +1,176 @@
+# Build installers on each platform's native runner.
+# Mac/Linux packages must not be cross-compiled (node-pty + electron-builder).
+#
+# Triggers:
+#   - workflow_dispatch: Actions → Build → Run workflow
+#   - push tags: v0.1.1 → builds + attaches artifacts to a GitHub Release
+#   - pull_request: typecheck only (fast)
+#
+# Artifacts (unsigned): download from the run's "Artifacts" or the Release page.
+# Optional code signing: add secrets CSC_LINK / CSC_KEY_PASSWORD (and Apple
+# notarization secrets) — left disabled by default for community builds.
+
+name: Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: 'Platforms to build (comma-separated: win,mac,linux,all)'
+        required: false
+        default: 'all'
+  push:
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Skip code-signing discovery (no Apple/Windows certs in CI by default)
+  CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+  # electron-builder can use GH_TOKEN for publishing; we only upload artifacts
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+
+  build-windows:
+    name: Windows
+    needs: typecheck
+    if: >
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' &&
+      (contains(github.event.inputs.platforms, 'win') || github.event.inputs.platforms == 'all' || github.event.inputs.platforms == '')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build Windows installers
+        # dist:win regenerates ico, rebuilds node-pty for Electron ABI, then packages
+        run: npm run dist:win
+        shell: bash
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: |
+            release/*.exe
+            release/*.blockmap
+            release/latest.yml
+          if-no-files-found: error
+          retention-days: 14
+
+  build-mac:
+    name: macOS
+    needs: typecheck
+    if: >
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' &&
+      (contains(github.event.inputs.platforms, 'mac') || github.event.inputs.platforms == 'all' || github.event.inputs.platforms == '')
+    # Apple Silicon runner (arm64). Universal/x64 can be added later if needed.
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build macOS DMG
+        run: npm run dist:mac
+        env:
+          # Explicit unsigned community build
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/latest-mac.yml
+          if-no-files-found: error
+          retention-days: 14
+
+  build-linux:
+    name: Linux
+    needs: typecheck
+    if: >
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' &&
+      (contains(github.event.inputs.platforms, 'linux') || github.event.inputs.platforms == 'all' || github.event.inputs.platforms == '')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install system deps (rpm/fpm optional helpers)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm fakeroot dpkg
+      - name: Install dependencies
+        run: npm ci
+      - name: Build Linux packages
+        run: npm run dist:linux
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/*.yml
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: GitHub Release
+    needs: [build-windows, build-mac, build-linux]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: List downloaded files
+        run: find dist -type f | sort
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: |
+            dist/**/*.exe
+            dist/**/*.dmg
+            dist/**/*.zip
+            dist/**/*.AppImage
+            dist/**/*.deb
+            dist/**/*.blockmap
+            dist/**/*.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

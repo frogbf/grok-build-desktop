@@ -92,6 +92,24 @@ npm ci
 npm run dist:linux
 ```
 
+### GitHub Actions (remote multi-platform)
+
+No local Mac/Linux machine required. CI builds each OS on its native runner:
+
+| Trigger | What runs |
+|---------|-----------|
+| **Actions → Build → Run workflow** | Manual build (`platforms`: `all` / `win` / `mac` / `linux`) |
+| **Push tag `v*`** (e.g. `v0.1.1`) | Win + Mac + Linux → draft **GitHub Release** with artifacts |
+| **Pull request** | Typecheck only |
+
+1. Push this repo to GitHub (enable Actions).
+2. Open **Actions** → **Build** → **Run workflow** (or `git tag v0.1.1 && git push origin v0.1.1`).
+3. Download **Artifacts** from the finished run (`windows-x64`, `macos`, `linux`), or publish the draft Release.
+
+Builds are **unsigned** by default (`CSC_IDENTITY_AUTO_DISCOVERY=false`). macOS may show “unidentified developer”; Windows may show SmartScreen. Code signing secrets can be added later.
+
+Workflow file: [`.github/workflows/build.yml`](./.github/workflows/build.yml).
+
 ### Windows notes
 
 | Topic | Detail |
