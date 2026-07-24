@@ -4,9 +4,14 @@
 
 面向 [Grok Build](https://github.com/xai-org/grok-build) 的社区 **Electron** 桌面客户端。
 
+<p align="center">
+  <img src="./docs/screenshot.png" alt="Grok Build Desktop 主界面：侧栏、问候与输入框" width="900" />
+</p>
+
 - **布局** — Codex 风格工作台（侧栏会话 · 主对话 · 检视面板）
 - **视觉** — Grok Night：深色单色底 + 品红/紫强调色 + 原创 Singularity 标识
 - **运行时** — 官方 `grok` CLI 作为 agent 后端（不在桌面端重写 agent 循环）
+- **输入** — 支持粘贴 / 拖入图片与文件，模型与思考强度、权限模式可切换
 
 > 非官方社区客户端，**与 xAI / SpaceXAI 无隶属关系**。
 >

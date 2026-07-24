@@ -4,9 +4,14 @@
 
 Community **Electron** desktop GUI for [Grok Build](https://github.com/xai-org/grok-build).
 
+<p align="center">
+  <img src="./docs/screenshot.png" alt="Grok Build Desktop — empty home with sidebar, greeting, and composer" width="900" />
+</p>
+
 - **Layout** — Codex-style command center (sidebar threads · main chat · inspector)
 - **Look** — Grok Night: deep monochrome, magenta/violet accent, original Singularity mark
 - **Runtime** — Official `grok` CLI as the agent backend (no reimplemented agent loop)
+- **Composer** — Paste / drag-drop images & files, model & effort chips, permission modes
 
 > Unofficial community client. **Not affiliated with xAI / SpaceXAI.**
 >
