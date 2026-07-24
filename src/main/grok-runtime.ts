@@ -314,8 +314,10 @@ export class GrokRuntime {
           // Do NOT invent language-specific titles here — renderer uses i18n for empty rows.
           const generated = (summary.generated_title || '').trim()
           const sessionSummary = (summary.session_summary || '').trim()
-          const fromPrompt =
-            generated || sessionSummary ? null : firstUserPromptSnippet(sessionDir)
+          const fromPrompt = firstUserPromptSnippet(sessionDir)
+          const msgCount = summary.num_chat_messages ?? summary.num_messages ?? 0
+          // Prefer metadata titles; fall back to first real user prompt on disk.
+          // "empty" only when we cannot find any user-facing signal yet.
           const empty = !generated && !sessionSummary && !fromPrompt
           const title = empty
             ? ''
@@ -329,7 +331,7 @@ export class GrokRuntime {
             updatedAt: ts,
             modelId: summary.current_model_id || null,
             effort: summary.reasoning_effort || null,
-            messageCount: summary.num_chat_messages ?? summary.num_messages ?? 0,
+            messageCount: msgCount,
             empty,
           })
         } catch {

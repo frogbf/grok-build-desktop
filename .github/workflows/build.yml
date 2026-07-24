@@ -7,8 +7,6 @@
 #   - pull_request: typecheck only (fast)
 #
 # Artifacts (unsigned): download from the run's "Artifacts" or the Release page.
-# Optional code signing: add secrets CSC_LINK / CSC_KEY_PASSWORD (and Apple
-# notarization secrets) — left disabled by default for community builds.
 
 name: Build
 
@@ -32,7 +30,7 @@ concurrency:
 env:
   # Skip code-signing discovery (no Apple/Windows certs in CI by default)
   CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-  # electron-builder can use GH_TOKEN for publishing; we only upload artifacts
+  # Do not auto-publish; we upload artifacts / create draft releases ourselves
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
@@ -62,10 +60,17 @@ jobs:
         with:
           node-version: '20'
           cache: npm
+      # node-pty / node-gyp need MSVC on Windows
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
       - name: Install dependencies
         run: npm ci
+      - name: Rebuild node-pty for Electron
+        run: npm run rebuild:pty
+        env:
+          npm_config_msvs_version: '2022'
       - name: Build Windows installers
-        # dist:win regenerates ico, rebuilds node-pty for Electron ABI, then packages
         run: npm run dist:win
         shell: bash
       - name: Upload Windows artifacts
@@ -86,7 +91,7 @@ jobs:
       github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch' &&
       (contains(github.event.inputs.platforms, 'mac') || github.event.inputs.platforms == 'all' || github.event.inputs.platforms == '')
-    # Apple Silicon runner (arm64). Universal/x64 can be added later if needed.
+    # Apple Silicon runner (arm64)
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -94,12 +99,16 @@ jobs:
         with:
           node-version: '20'
           cache: npm
+      # Python 3.12+ dropped distutils; node-gyp still imports it
+      - name: Install setuptools (distutils for node-gyp)
+        run: python3 -m pip install --user setuptools
       - name: Install dependencies
         run: npm ci
+      - name: Rebuild node-pty for Electron
+        run: npm run rebuild:pty
       - name: Build macOS DMG
         run: npm run dist:mac
         env:
-          # Explicit unsigned community build
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
@@ -126,12 +135,14 @@ jobs:
         with:
           node-version: '20'
           cache: npm
-      - name: Install system deps (rpm/fpm optional helpers)
+      - name: Install system deps
         run: |
           sudo apt-get update
           sudo apt-get install -y rpm fakeroot dpkg
       - name: Install dependencies
         run: npm ci
+      - name: Rebuild node-pty for Electron
+        run: npm run rebuild:pty
       - name: Build Linux packages
         run: npm run dist:linux
       - name: Upload Linux artifacts

@@ -2,6 +2,10 @@
   "name": "grok-build-desktop",
   "version": "0.1.0",
   "description": "Community desktop GUI for Grok Build — Codex-style workspace, Grok aesthetics",
+  "author": {
+    "name": "Grok Build Desktop contributors",
+    "email": "frogbf@users.noreply.github.com"
+  },
   "private": true,
   "main": "out/main/index.js",
   "type": "module",
@@ -17,10 +21,10 @@
     "icons:ico": "node scripts/generate-ico.mjs",
     "pack": "npm run build && electron-builder --dir",
     "pack:win": "npm run build && electron-builder --dir --win",
-    "dist": "npm run build && electron-builder",
-    "dist:win": "npm run icons:ico && npm run rebuild:pty && npm run build && electron-builder --win --x64",
-    "dist:mac": "npm run rebuild:pty && npm run build && electron-builder --mac",
-    "dist:linux": "npm run rebuild:pty && npm run build && electron-builder --linux"
+    "dist": "npm run build && electron-builder --publish never",
+    "dist:win": "npm run icons:ico && npm run build && electron-builder --win --x64 --publish never",
+    "dist:mac": "npm run build && electron-builder --mac --publish never",
+    "dist:linux": "npm run build && electron-builder --linux --publish never"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",
@@ -88,8 +92,11 @@
         "AppImage",
         "deb"
       ],
-      "category": "Development"
+      "category": "Development",
+      "maintainer": "Grok Build Desktop contributors <frogbf@users.noreply.github.com>",
+      "executableName": "grok-build-desktop"
     },
+    "publish": null,
     "mac": {
       "icon": "resources/icon.png",
       "target": [

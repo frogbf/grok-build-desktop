@@ -241,27 +241,33 @@ export default function App() {
     try {
       const items = await api.grok.listSessions(200)
       setSessions((prev) => {
-        // Keep in-memory draft sessions that are not yet on disk
-        const drafts = prev.filter((s) => !s.onDisk && s.messages.length === 0)
-        const draftIds = new Set(drafts.map((s) => s.id))
-        // Main only marks `empty` (locale-neutral). Hide empty shells in the UI
-        // so the sidebar stays useful; display titles use i18n elsewhere.
+        const prevById = new Map(prev.map((s) => [s.id, s]))
+        const hasLocalUserChat = (s: Session) =>
+          s.status === 'running' || s.messages.some((m) => m.role === 'user')
+
+        // Main marks empty shells locale-neutrally. Still keep a disk row if we
+        // already have a real local turn (title/history often lag right after exit).
         const fromDisk: Session[] = items
-          .filter((it) => !it.empty && !draftIds.has(it.id))
+          .filter((it) => {
+            if (!it.empty) return true
+            const local = prevById.get(it.id)
+            return Boolean(local && hasLocalUserChat(local))
+          })
           .map((it) => {
-            const existing = prev.find((s) => s.id === it.id)
+            const existing = prevById.get(it.id)
             // Preserve already-loaded messages / running state
             if (existing && (existing.messages.length > 0 || existing.status === 'running')) {
               return {
                 ...existing,
                 title: it.title || existing.title,
-                cwd: it.cwd,
-                projectName: it.projectName,
+                cwd: it.cwd || existing.cwd,
+                projectName: it.projectName || existing.projectName,
                 updatedAt: Math.max(existing.updatedAt, it.updatedAt),
                 onDisk: true,
-                modelId: it.modelId,
-                effort: it.effort,
-                empty: it.empty,
+                modelId: it.modelId ?? existing.modelId,
+                effort: it.effort ?? existing.effort,
+                // Local user turns win over a lagging empty flag from disk
+                empty: hasLocalUserChat(existing) ? false : it.empty,
               }
             }
             return {
@@ -278,9 +284,15 @@ export default function App() {
               empty: it.empty,
             }
           })
+
         const diskIds = new Set(fromDisk.map((s) => s.id))
-        const keepDrafts = drafts.filter((d) => !diskIds.has(d.id))
-        return [...keepDrafts, ...fromDisk]
+        // Keep empty UI drafts + in-flight / just-sent sessions not yet listed on disk
+        const keepLocal = prev.filter((s) => {
+          if (diskIds.has(s.id)) return false
+          if (!s.onDisk && s.messages.length === 0) return true
+          return hasLocalUserChat(s)
+        })
+        return [...keepLocal, ...fromDisk]
       })
     } catch {
       // ignore
@@ -430,12 +442,13 @@ export default function App() {
           ...s,
           status: event.code && event.code !== 0 ? 'error' : 'idle',
           onDisk: true,
+          empty: false,
           updatedAt: Date.now(),
         }))
         void refreshGit()
-        // Refresh titles from disk after turn
+        // Refresh titles from disk after turn (brief delay so grok flushes summary/history)
         if (event.code === 0 || event.code === null) {
-          void loadSessionsFromDisk()
+          window.setTimeout(() => void loadSessionsFromDisk(), 500)
         }
       }
     })
@@ -677,9 +690,10 @@ export default function App() {
           ...s,
           title,
           status: 'running',
+          empty: false,
           updatedAt: now,
           cwd: sessionCwd || s.cwd,
-          projectName: basename(sessionCwd || s.cwd),
+          projectName: basename(sessionCwd || s.cwd) || s.projectName,
           messages: [...s.messages, userMsg],
         }
       }),
