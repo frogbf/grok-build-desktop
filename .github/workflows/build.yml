@@ -53,7 +53,10 @@ jobs:
       github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch' &&
       (contains(github.event.inputs.platforms, 'win') || github.event.inputs.platforms == 'all' || github.event.inputs.platforms == '')
-    runs-on: windows-latest
+    # Pin to windows-2022 (VS 2022). windows-latest / windows-2025 now ship
+    # Visual Studio 2026 (18.x); @electron/rebuild → node-gyp@9 cannot detect it
+    # ("Could not find any Visual Studio installation to use").
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -66,6 +69,20 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
+          vsversion: '2022'
+      - name: Verify MSVC toolchain
+        shell: pwsh
+        run: |
+          Write-Host "VCINSTALLDIR=$env:VCINSTALLDIR"
+          Write-Host "WindowsSdkDir=$env:WindowsSdkDir"
+          if (-not (Get-Command cl.exe -ErrorAction SilentlyContinue)) {
+            throw "cl.exe not on PATH after msvc-dev-cmd"
+          }
+          cl.exe 2>&1 | Select-Object -First 3
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (Test-Path $vswhere) {
+            & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath,catalog_productLineVersion
+          }
       - name: Install dependencies
         run: npm ci
         env:
