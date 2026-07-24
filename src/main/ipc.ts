@@ -1,11 +1,12 @@
 import { ipcMain, dialog, BrowserWindow, shell, app } from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join, extname, basename } from 'node:path'
+import { join, extname, basename, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { GrokRuntime } from './grok-runtime'
 import type { TerminalManager } from './terminal-manager'
 import { checkoutBranch, getFileDiff, getGitStatus, listBranches } from './git-service'
 import { fetchAccountSubscription } from './account-service'
+import { searchProjectFiles } from './file-search'
 
 const MAX_VISION_IMAGE_BYTES = 20 * 1024 * 1024
 
@@ -293,6 +294,35 @@ export function registerIpc(runtime: GrokRuntime, terminals: TerminalManager): v
         }
       } catch (e) {
         return { ok: false, error: e instanceof Error ? e.message : String(e) }
+      }
+    },
+  )
+
+  /**
+   * Fuzzy file index for composer `@` mentions.
+   * Scoped to the given project cwd (no arbitrary FS search).
+   */
+  ipcMain.handle(
+    'fs:searchFiles',
+    async (
+      _evt,
+      payload: { cwd?: string; query?: string; limit?: number },
+    ): Promise<{
+      ok: boolean
+      hits: Array<{ path: string; absPath: string; isDir: boolean; score: number }>
+      error?: string
+    }> => {
+      const cwd = typeof payload?.cwd === 'string' ? payload.cwd.trim() : ''
+      if (!cwd) return { ok: false, hits: [], error: 'no project directory' }
+      // Soft sandbox: must be an absolute existing dir
+      try {
+        const resolved = resolve(cwd)
+        if (!existsSync(resolved)) return { ok: false, hits: [], error: 'directory not found' }
+        return searchProjectFiles(resolved, typeof payload?.query === 'string' ? payload.query : '', {
+          limit: typeof payload?.limit === 'number' ? payload.limit : 40,
+        })
+      } catch (e) {
+        return { ok: false, hits: [], error: e instanceof Error ? e.message : String(e) }
       }
     },
   )

@@ -322,6 +322,16 @@ const api = {
       name?: string
       error?: string
     }> => ipcRenderer.invoke('fs:readImageBase64', filePath),
+    /** Fuzzy project file search for `@` mentions. */
+    searchProject: (payload: {
+      cwd: string
+      query: string
+      limit?: number
+    }): Promise<{
+      ok: boolean
+      hits: Array<{ path: string; absPath: string; isDir: boolean; score: number }>
+      error?: string
+    }> => ipcRenderer.invoke('fs:searchFiles', payload),
   },
   ui: {
     getZoomFactor: (): number => webFrame.getZoomFactor(),

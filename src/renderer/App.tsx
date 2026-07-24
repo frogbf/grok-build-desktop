@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { TitleBar } from './components/TitleBar'
 import { Sidebar, type ProjectGroup } from './components/Sidebar'
 import { ChatThread } from './components/ChatThread'
-import { Composer, type SubmitPayload } from './components/Composer'
+import { Composer, type ComposerLocalCommand, type SubmitPayload } from './components/Composer'
 import {
   buildTextPromptWithAttachments,
   type ComposerAttachment,
@@ -711,8 +711,7 @@ export default function App() {
     )
     setRawLog([])
     toolOffsetRef.current = 0
-    setPanelOpen(true)
-    if (panelMode !== 'browser') setPanelMode('review')
+    // Keep right panel as the user left it — don't force-open on every send.
 
     await window.grokDesktop.grok.prompt({
       sessionId,
@@ -764,9 +763,73 @@ export default function App() {
     }
   }
 
+  const onComposerLocalCommand = useCallback(
+    (cmd: ComposerLocalCommand) => {
+      switch (cmd) {
+        case 'new':
+          onNewSession()
+          break
+        case 'resume':
+          setSearchOpen(true)
+          break
+        case 'settings':
+          setShowSkills(false)
+          setShowSettings(true)
+          break
+        case 'skills':
+          setShowSettings(false)
+          setShowSkills(true)
+          break
+        case 'usage':
+          setPanelMode('review')
+          setPanelOpen(true)
+          void refreshSubscription()
+          break
+        case 'copy': {
+          const msgs = active?.messages ?? []
+          let last = ''
+          for (let i = msgs.length - 1; i >= 0; i--) {
+            if (msgs[i].role === 'assistant' && msgs[i].content.trim()) {
+              last = msgs[i].content
+              break
+            }
+          }
+          if (last) {
+            void navigator.clipboard.writeText(last).then(
+              () => setActionMessage(t('slashCopied')),
+              () => setActionMessage(t('slashCopyEmpty')),
+            )
+          } else {
+            setActionMessage(t('slashCopyEmpty'))
+          }
+          break
+        }
+        case 'home':
+          setActiveId(null)
+          setRawLog([])
+          setShowSettings(false)
+          setShowSkills(false)
+          break
+        case 'docs':
+          void window.grokDesktop.shell.openExternal('https://docs.x.ai/build/overview')
+          break
+        case 'terminal':
+          setTerminalOpen((o) => !o)
+          break
+        case 'help':
+          setActionMessage(t('slashHelpToast'))
+          break
+        default:
+          break
+      }
+    },
+    [onNewSession, active, refreshSubscription, t],
+  )
+
   const composer = (
     <Composer
       projectName={projectName}
+      cwd={workCwd}
       floating={isEmptyHome}
       disabled={!ready || historyLoading}
       running={active?.status === 'running'}
@@ -776,6 +839,7 @@ export default function App() {
       onSubmit={onSubmit}
       onStop={onStop}
       onPickProject={onPickCwd}
+      onLocalCommand={onComposerLocalCommand}
     />
   )
 

@@ -19,8 +19,17 @@ import {
   readFileAsDataUrl,
   type ComposerAttachment,
 } from '../lib/attachments'
+import { findActiveTrigger, replaceRange } from '../lib/composer-trigger'
+import {
+  buildSlashCatalog,
+  filterSlashCommands,
+  tryParseSlashLine,
+  type SlashCommand,
+  type SkillLike,
+} from '../lib/slash-commands'
 import type { MessageKey } from '../i18n/locales/zh'
 import { uid } from '../lib/types'
+import { ComposerMenu, type MenuItem } from './ComposerMenu'
 import './Composer.css'
 
 export type PromptOptions = {
@@ -36,8 +45,23 @@ export type SubmitPayload = {
   opts: PromptOptions
 }
 
+/** Local slash actions handled by the app shell (not sent to the CLI). */
+export type ComposerLocalCommand =
+  | 'new'
+  | 'resume'
+  | 'settings'
+  | 'skills'
+  | 'usage'
+  | 'copy'
+  | 'home'
+  | 'docs'
+  | 'terminal'
+  | 'help'
+
 type Props = {
   projectName: string
+  /** Project cwd for `@` file search */
+  cwd?: string
   floating?: boolean
   disabled?: boolean
   running?: boolean
@@ -47,6 +71,7 @@ type Props = {
   onSubmit: (payload: SubmitPayload) => void
   onStop?: () => void
   onPickProject?: () => void
+  onLocalCommand?: (cmd: ComposerLocalCommand) => void
 }
 
 const ACCESS_I18N: Record<AccessUi, MessageKey> = {
@@ -57,6 +82,7 @@ const ACCESS_I18N: Record<AccessUi, MessageKey> = {
 
 export function Composer({
   projectName,
+  cwd = '',
   floating,
   disabled,
   running,
@@ -66,6 +92,7 @@ export function Composer({
   onSubmit,
   onStop,
   onPickProject,
+  onLocalCommand,
 }: Props) {
   const modelList = models.length
     ? models
@@ -93,6 +120,21 @@ export function Composer({
   const [access, setAccess] = useState<AccessUi>('ask')
   const ref = useRef<HTMLTextAreaElement>(null)
   const dragDepth = useRef(0)
+
+  // @ / slash autocomplete
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [menuKind, setMenuKind] = useState<'file' | 'slash'>('slash')
+  const [menuQuery, setMenuQuery] = useState('')
+  const [menuStart, setMenuStart] = useState(0)
+  const [menuEnd, setMenuEnd] = useState(0)
+  const [menuIndex, setMenuIndex] = useState(0)
+  const [fileHits, setFileHits] = useState<
+    Array<{ path: string; absPath: string; isDir: boolean }>
+  >([])
+  const [fileLoading, setFileLoading] = useState(false)
+  const [skills, setSkills] = useState<SkillLike[]>([])
+  const fileSearchGen = useRef(0)
+  const caretRef = useRef(0)
 
   const activeModel = useMemo(
     () => modelList.find((m) => m.id === modelId) || modelList[0],
@@ -388,14 +430,318 @@ export function Composer({
     setEffort(next)
   }
 
+  const slashCatalog = useMemo(
+    () => buildSlashCatalog(modelList, skills),
+    [modelList, skills],
+  )
+
+  const filteredSlash = useMemo(
+    () => (menuKind === 'slash' ? filterSlashCommands(slashCatalog, menuQuery, 40) : []),
+    [menuKind, slashCatalog, menuQuery],
+  )
+
+  // Prefetch skills when project is ready (for / menu)
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      if (!cwd || typeof window.grokDesktop?.grok?.listSkills !== 'function') {
+        setSkills([])
+        return
+      }
+      try {
+        const res = await window.grokDesktop.grok.listSkills(cwd)
+        if (cancelled) return
+        if (res.ok) {
+          setSkills(
+            res.skills.map((s) => ({
+              name: s.name,
+              description: s.description,
+              userInvocable: s.userInvocable,
+              disabled: s.disabled,
+            })),
+          )
+        }
+      } catch {
+        if (!cancelled) setSkills([])
+      }
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [cwd])
+
+  // Debounced file search for @ menu
+  useEffect(() => {
+    if (!menuOpen || menuKind !== 'file') return
+    if (!cwd) {
+      setFileHits([])
+      setFileLoading(false)
+      return
+    }
+    const gen = ++fileSearchGen.current
+    setFileLoading(true)
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const res = await window.grokDesktop.files.searchProject({
+            cwd,
+            query: menuQuery,
+            limit: 40,
+          })
+          if (fileSearchGen.current !== gen) return
+          if (res.ok) {
+            setFileHits(res.hits.map((h) => ({ path: h.path, absPath: h.absPath, isDir: h.isDir })))
+          } else {
+            setFileHits([])
+          }
+        } catch {
+          if (fileSearchGen.current === gen) setFileHits([])
+        } finally {
+          if (fileSearchGen.current === gen) setFileLoading(false)
+        }
+      })()
+    }, 80)
+    return () => window.clearTimeout(timer)
+  }, [menuOpen, menuKind, menuQuery, cwd])
+
+  useEffect(() => {
+    setMenuIndex(0)
+  }, [menuQuery, menuKind, fileHits.length, filteredSlash.length])
+
+  const closeMenu = useCallback(() => {
+    setMenuOpen(false)
+    setMenuQuery('')
+  }, [])
+
+  const syncTrigger = useCallback(
+    (nextValue: string, caret: number) => {
+      caretRef.current = caret
+      const trig = findActiveTrigger(nextValue, caret)
+      if (!trig) {
+        setMenuOpen(false)
+        return
+      }
+      setMenuKind(trig.kind)
+      setMenuQuery(trig.query)
+      setMenuStart(trig.start)
+      setMenuEnd(trig.end)
+      setMenuOpen(true)
+    },
+    [],
+  )
+
+  const setValueAndResize = useCallback((next: string, caret?: number) => {
+    setValue(next)
+    requestAnimationFrame(() => {
+      const el = ref.current
+      if (!el) return
+      el.style.height = 'auto'
+      el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+      if (typeof caret === 'number') {
+        el.setSelectionRange(caret, caret)
+        caretRef.current = caret
+      }
+    })
+  }, [])
+
+  const applyFilePick = useCallback(
+    (hit: { path: string; absPath: string }) => {
+      // Keep @rel path (CLI-compatible mention). Also attach so vision/files wire through.
+      const insert = `@${hit.path} `
+      const { value: next, caret } = replaceRange(value, menuStart, menuEnd, insert)
+      setValueAndResize(next, caret)
+      closeMenu()
+      void ingestPaths([hit.absPath])
+    },
+    [value, menuStart, menuEnd, setValueAndResize, closeMenu, ingestPaths],
+  )
+
+  const applySlashPick = useCallback(
+    (cmd: SlashCommand) => {
+      const act = cmd.action
+      if (act.type === 'local') {
+        setValueAndResize(value.slice(0, menuStart) + value.slice(menuEnd), menuStart)
+        closeMenu()
+        onLocalCommand?.(act.id as ComposerLocalCommand)
+        return
+      }
+      if (act.type === 'set_access') {
+        setAccess(act.access)
+        setValueAndResize(value.slice(0, menuStart) + value.slice(menuEnd), menuStart)
+        closeMenu()
+        return
+      }
+      if (act.type === 'set_model') {
+        let mid = act.modelId
+        let eff: string | undefined
+        if (mid.includes('::')) {
+          const [m, e] = mid.split('::')
+          mid = m
+          eff = e
+        }
+        setModelId(mid)
+        if (eff) setEffort(eff)
+        else setEffort(defaultEffortFor(modelList.find((m) => m.id === mid)))
+        setValueAndResize(value.slice(0, menuStart) + value.slice(menuEnd), menuStart)
+        closeMenu()
+        return
+      }
+      if (act.type === 'set_effort') {
+        setEffort(act.effort)
+        setValueAndResize(value.slice(0, menuStart) + value.slice(menuEnd), menuStart)
+        closeMenu()
+        return
+      }
+      if (act.type === 'insert') {
+        const { value: next, caret } = replaceRange(value, menuStart, menuEnd, act.text)
+        setValueAndResize(next, caret)
+        closeMenu()
+        if (act.submit) {
+          // submit will run on next tick with updated value — handle via direct call
+          const text = next.trim()
+          if (text) {
+            onSubmit({
+              text,
+              attachments: [...attachments],
+              opts: {
+                model: modelId,
+                effort,
+                access,
+                permissionMode: ACCESS_TO_PERMISSION[access],
+              },
+            })
+            setValue('')
+            for (const a of attachments) revokePreview(a.previewUrl)
+            setAttachments([])
+            setAttachError(null)
+            if (ref.current) ref.current.style.height = 'auto'
+          }
+        }
+      }
+    },
+    [
+      value,
+      menuStart,
+      menuEnd,
+      setValueAndResize,
+      closeMenu,
+      onLocalCommand,
+      modelList,
+      onSubmit,
+      attachments,
+      modelId,
+      effort,
+      access,
+    ],
+  )
+
+  const menuItems: MenuItem[] = useMemo(() => {
+    if (menuKind === 'file') {
+      return fileHits.map((h) => ({
+        id: h.absPath,
+        title: h.path,
+        description: h.absPath,
+        meta: h.isDir ? 'dir' : 'file',
+        metaKind: 'file' as const,
+      }))
+    }
+    return filteredSlash.map((c) => {
+      const desc = c.description || (c.descriptionKey ? t(c.descriptionKey) : '')
+      return {
+        id: `${c.source}:${c.name}`,
+        title: `/${c.name}`,
+        description: desc,
+        meta:
+          c.source === 'skill'
+            ? 'skill'
+            : c.source === 'model'
+              ? 'model'
+              : c.argHint || '',
+        metaKind:
+          c.source === 'skill' ? 'skill' : c.source === 'model' ? 'model' : 'builtin',
+      }
+    })
+  }, [menuKind, fileHits, filteredSlash, t])
+
+  const pickMenuIndex = useCallback(
+    (index: number) => {
+      if (menuKind === 'file') {
+        const hit = fileHits[index]
+        if (hit) applyFilePick(hit)
+        return
+      }
+      const cmd = filteredSlash[index]
+      if (cmd) applySlashPick(cmd)
+    },
+    [menuKind, fileHits, filteredSlash, applyFilePick, applySlashPick],
+  )
+
   const canSend =
     !disabled && !running && (Boolean(value.trim()) || attachments.length > 0)
 
   const submit = () => {
+    if (menuOpen) {
+      if (menuItems.length > 0) {
+        pickMenuIndex(menuIndex)
+        return
+      }
+      closeMenu()
+    }
     if (!canSend) return
-    const text = value.trim()
+    let text = value.trim()
     // Allow image-only send
     if (!text && attachments.length === 0) return
+
+    // Intercept pure slash commands that desktop can handle locally
+    if (text.startsWith('/')) {
+      const parsed = tryParseSlashLine(text, modelList)
+      if (parsed) {
+        if (parsed.type === 'local') {
+          onLocalCommand?.(parsed.id as ComposerLocalCommand)
+          setValue('')
+          closeMenu()
+          return
+        }
+        if (parsed.type === 'set_access') {
+          setAccess(parsed.access)
+          setValue('')
+          closeMenu()
+          return
+        }
+        if (parsed.type === 'set_effort') {
+          setEffort(parsed.effort)
+          setValue('')
+          closeMenu()
+          return
+        }
+        if (parsed.type === 'set_model') {
+          let mid = parsed.modelId
+          let eff: string | undefined
+          if (mid.includes('::')) {
+            const [m, e] = mid.split('::')
+            mid = m
+            eff = e
+          }
+          setModelId(mid)
+          if (eff) setEffort(eff)
+          else setEffort(defaultEffortFor(modelList.find((m) => m.id === mid)))
+          setValue('')
+          closeMenu()
+          return
+        }
+      }
+      // /plan with description → set readonly and send description
+      if (/^\/plan\b/i.test(text)) {
+        const rest = text.replace(/^\/plan\b\s*/i, '').trim()
+        setAccess('readonly')
+        if (!rest) {
+          setValue('')
+          return
+        }
+        text = rest
+      }
+    }
 
     onSubmit({
       text,
@@ -411,6 +757,7 @@ export function Composer({
     for (const a of attachments) revokePreview(a.previewUrl)
     setAttachments([])
     setAttachError(null)
+    closeMenu()
     if (ref.current) ref.current.style.height = 'auto'
   }
 
@@ -489,6 +836,26 @@ export function Composer({
 
         {attachError ? <div className="composer-attach-error">{attachError}</div> : null}
 
+        <ComposerMenu
+          open={menuOpen && !disabled}
+          kind={menuKind}
+          query={menuQuery}
+          items={menuItems}
+          activeIndex={menuIndex}
+          emptyLabel={
+            menuKind === 'file'
+              ? !cwd
+                ? t('slashNeedProject')
+                : fileLoading
+                  ? t('loading')
+                  : t('fileSearchEmpty')
+              : t('slashEmpty')
+          }
+          titleLabel={menuKind === 'file' ? t('fileSearchTitle') : t('slashMenuTitle')}
+          onHover={setMenuIndex}
+          onPick={pickMenuIndex}
+        />
+
         <textarea
           ref={ref}
           rows={floating ? 2 : 1}
@@ -496,14 +863,55 @@ export function Composer({
           disabled={disabled}
           placeholder={t('placeholder')}
           onChange={(e) => {
-            setValue(e.target.value)
+            const next = e.target.value
+            const caret = e.target.selectionStart ?? next.length
+            setValue(next)
             e.target.style.height = 'auto'
             e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`
+            syncTrigger(next, caret)
+          }}
+          onClick={(e) => {
+            const el = e.currentTarget
+            syncTrigger(el.value, el.selectionStart ?? el.value.length)
+          }}
+          onKeyUp={(e) => {
+            if (e.key === 'Escape') return
+            const el = e.currentTarget
+            syncTrigger(el.value, el.selectionStart ?? el.value.length)
           }}
           onPaste={(e) => {
             void onPaste(e)
           }}
           onKeyDown={(e) => {
+            if (menuOpen) {
+              if (e.key === 'Escape') {
+                e.preventDefault()
+                closeMenu()
+                return
+              }
+              if (e.key === 'ArrowDown') {
+                e.preventDefault()
+                setMenuIndex((i) => Math.min(i + 1, Math.max(0, menuItems.length - 1)))
+                return
+              }
+              if (e.key === 'ArrowUp') {
+                e.preventDefault()
+                setMenuIndex((i) => Math.max(0, i - 1))
+                return
+              }
+              if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+                if (menuItems.length > 0) {
+                  e.preventDefault()
+                  pickMenuIndex(menuIndex)
+                  return
+                }
+                if (e.key === 'Tab') {
+                  e.preventDefault()
+                  closeMenu()
+                  return
+                }
+              }
+            }
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault()
               submit()
