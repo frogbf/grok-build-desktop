@@ -38,16 +38,19 @@ jobs:
     name: Typecheck
     runs-on: ubuntu-latest
     # Typecheck only needs TS; never compile node-pty here (postinstall hung ~10h).
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
+          registry-url: https://registry.npmjs.org
       # --ignore-scripts: skip postinstall → electron-builder install-app-deps
       # which tries to rebuild node-pty (slow / can hang on bare ubuntu).
-      - run: npm ci --ignore-scripts
+      # Fail fast if registry is unreachable (default npm hang is very long).
+      - name: Install dependencies (no native rebuild)
+        run: npm ci --ignore-scripts --fetch-timeout=120000 --fetch-retries=2
       - run: npm run typecheck
 
   build-windows:
@@ -74,9 +77,10 @@ jobs:
           # node-gyp 12 requires Node ^20.17 or >=22.9
           node-version: '22'
           cache: npm
+          registry-url: https://registry.npmjs.org
       # Skip postinstall; rebuild:pty runs explicitly after env is ready.
       - name: Install dependencies
-        run: npm ci --ignore-scripts
+        run: npm ci --ignore-scripts --fetch-timeout=120000 --fetch-retries=2
       - name: Verify node-gyp override (must be 12+)
         shell: pwsh
         run: |
@@ -128,6 +132,7 @@ jobs:
         with:
           node-version: '20'
           cache: npm
+          registry-url: https://registry.npmjs.org
       # Python 3.12+ dropped distutils; node-gyp still imports StrictVersion from it.
       # Prefer Python 3.11 (still has distutils) + setuptools as a belt-and-suspenders.
       - uses: actions/setup-python@v5
@@ -138,7 +143,7 @@ jobs:
           python -m pip install --upgrade pip setuptools
           python -c "from distutils.version import StrictVersion; print('distutils ok', StrictVersion('1.0'))"
       - name: Install dependencies
-        run: npm ci --ignore-scripts
+        run: npm ci --ignore-scripts --fetch-timeout=120000 --fetch-retries=2
         env:
           npm_config_python: python
       - name: Rebuild node-pty for Electron
@@ -176,6 +181,7 @@ jobs:
         with:
           node-version: '20'
           cache: npm
+          registry-url: https://registry.npmjs.org
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -188,7 +194,7 @@ jobs:
           python -m pip install --upgrade pip setuptools
           python -c "from distutils.version import StrictVersion; print('distutils ok')"
       - name: Install dependencies
-        run: npm ci --ignore-scripts
+        run: npm ci --ignore-scripts --fetch-timeout=120000 --fetch-retries=2
         env:
           npm_config_python: python
       - name: Rebuild node-pty for Electron
