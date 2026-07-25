@@ -16,7 +16,7 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "postinstall": "electron-builder install-app-deps || true",
+    "postinstall": "node scripts/postinstall.mjs",
     "rebuild:pty": "node scripts/rebuild-pty.mjs",
     "icons:ico": "node scripts/generate-ico.mjs",
     "pack": "npm run build && electron-builder --dir",
